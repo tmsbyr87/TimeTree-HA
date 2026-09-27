@@ -14,6 +14,7 @@ from ical.calendar import Calendar
 from ical.event import Event
 from ical.timeline import Timeline
 
+from .api import TimeTreeLabel
 from .event import is_deleted, to_ical_event
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,6 +34,32 @@ class EventStore:
         # The coordinator therefore materialises a bounded window once, off the
         # event loop, and the entity's ``event`` property only reads this list.
         self._window: list[Event] = []
+        self._labels: dict[int, TimeTreeLabel] = {}
+
+    @property
+    def labels(self) -> dict[int, TimeTreeLabel]:
+        """Colour labels of the calendar, keyed by label id."""
+        return self._labels
+
+    def set_labels(self, labels: dict[int, TimeTreeLabel]) -> None:
+        """Replace the known labels (does not invalidate the event window)."""
+        self._labels = dict(labels)
+
+    def label_id_of(self, uid: str) -> int | None:
+        """Return the raw TimeTree label id attached to an event uid."""
+        raw = self._raw.get(uid)
+        if not raw:
+            return None
+        value = raw.get("label_id")
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def label_of(self, uid: str) -> TimeTreeLabel | None:
+        """Return the label object for an event uid, if any."""
+        label_id = self.label_id_of(uid)
+        return self._labels.get(label_id) if label_id is not None else None
 
     @property
     def cursor(self) -> int | None:

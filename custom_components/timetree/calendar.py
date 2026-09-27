@@ -75,6 +75,18 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
         )
 
     @property
+    def extra_state_attributes(self) -> dict:
+        """Expose the calendar's labels so the bundled card can offer filters."""
+        labels = self.coordinator.data.labels
+        return {
+            "calendar_id": self.coordinator.calendar_id,
+            "labels": [
+                {"id": lbl.label_id, "name": lbl.name, "color": lbl.color}
+                for lbl in sorted(labels.values(), key=lambda l: l.name.lower())
+            ],
+        }
+
+    @property
     def event(self) -> CalendarEvent | None:
         """Return the currently running or next upcoming event."""
         now = dt_util.now()
