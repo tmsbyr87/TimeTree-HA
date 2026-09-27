@@ -10,7 +10,7 @@
  * editor based on <ha-form>, so the card can be configured without YAML.
  */
 
-const CARD_VERSION = "1.6.1";
+const CARD_VERSION = "1.6.3";
 const CARD_TAG = "timetree-card";
 const EDITOR_TAG = "timetree-card-editor";
 const REFRESH_MS = 15 * 60 * 1000;
@@ -200,11 +200,12 @@ const STYLE = `
   .dayhead-sel { padding: 12px 0 2px; font-weight: 700; }
 
   /* ---- detail dialog ---- */
-  .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9; display: flex; align-items: flex-end; justify-content: center;
-    animation: fade 120ms ease; }
+  .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9; display: flex; align-items: flex-end; justify-content: center; }
+  .backdrop.anim { animation: fade 120ms ease; }
+  .backdrop.anim .sheet { animation: up 160ms ease; }
   @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
   .sheet { width: 100%; max-width: 560px; max-height: 88vh; overflow: auto; background: var(--ha-card-background, var(--card-background-color, #fff));
-    color: var(--primary-text-color); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 32px rgba(0,0,0,.25); animation: up 160ms ease; }
+    color: var(--primary-text-color); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 32px rgba(0,0,0,.25); }
   @keyframes up { from { transform: translateY(24px); opacity: .6 } to { transform: none; opacity: 1 } }
   @media (min-width: 640px) { .backdrop { align-items: center; padding: 24px; } .sheet { border-radius: 20px; } }
   .sheet .bar { height: 6px; background: var(--c, var(--tt-accent)); }
@@ -341,11 +342,26 @@ class TimeTreeCard extends HTMLElement {
       .map((e) => { const s = hass.states[e]; return s ? `${s.state}|${s.last_updated}` : "missing"; }).join(",");
     const changed = sig !== this._sig;
     this._sig = sig;
-    if (first || changed) this._maybeFetch(first); else this._render();
+    // Home Assistant pushes a new hass object on every state change anywhere
+    // in the house (several per second on a busy install). Only react when
+    // the calendars or the language changed – re-rendering on every update
+    // made an open detail sheet flicker.
+    const language = lang(hass);
+    const langChanged = language !== this._lang;
+    this._lang = language;
+    if (first || changed) this._maybeFetch(first); else if (langChanged) this._render();
   }
 
-  connectedCallback() { this._timer = setInterval(() => this._maybeFetch(true), REFRESH_MS); }
-  disconnectedCallback() { if (this._timer) clearInterval(this._timer); this._timer = null; }
+  connectedCallback() {
+    this._timer = setInterval(() => this._maybeFetch(true), REFRESH_MS);
+    // "now" highlighting and past events move with the clock
+    this._clock = setInterval(() => this._render(), 60 * 1000);
+  }
+  disconnectedCallback() {
+    if (this._timer) clearInterval(this._timer);
+    if (this._clock) clearInterval(this._clock);
+    this._timer = this._clock = null;
+  }
   getCardSize() { return this._view === "month" ? 8 : this._config?.compact ? 3 : 5; }
   getGridOptions() { return { columns: 12, min_columns: 6, rows: "auto" }; }
 
@@ -621,10 +637,67 @@ class TimeTreeCard extends HTMLElement {
     const header = c.show_header
       ? `<div class="header">${iconHtml}<div style="min-width:0"><div class="title">${esc(title)}</div></div><div class="spacer"></div>${this._count ? `<div class="count">${this._count}</div>` : ""}</div>` : "";
 
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style>
-      <ha-card class="${layoutClass}${c.compact ? " compact" : ""} view-${this._view}" style="${accent}">${header}${tabs}${chips}<div class="body">${body}</div>${this._dialogHtml(now)}</ha-card>`;
+    // Build the skeleton once and only replace the parts whose markup changed,
+    // so an open dialog is never torn down by an unrelated re-render.
+    if (!this._card) {
+      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card><div class="main"></div><div class="dlg"></div></ha-card>`;
+      this._card = this.shadowRoot.querySelector("ha-card");
+      this._mainEl = this._card.querySelector(".main");
+      this._dlgEl = this._card.querySelector(".dlg");
+      this._mainHtml = this._dlgHtml = null;
+    }
+    const cls = `${layoutClass}${c.compact ? " compact" : ""} view-${this._view}`;
+    if (this._card.className !== cls) this._card.className = cls;
+    if ((this._card.getAttribute("style") || "") !== accent) this._card.setAttribute("style", accent);
 
-    // wire up
+    const mainHtml = `${header}${tabs}${chips}<div class="body">${body}</div>`;
+    if (mainHtml !== this._mainHtml) {
+      this._mainHtml = mainHtml;
+      this._mainEl.innerHTML = mainHtml;
+      this._wireMain();
+    }
+    this._renderDialog(now);
+  }
+
+  _renderDialog(now) {
+    const html = this._dialogHtml(now);
+    if (html === this._dlgHtml) return;
+    const opening = !this._dlgHtml && html;
+    this._dlgHtml = html;
+    const current = this._dlgEl.querySelector(".backdrop");
+    if (current && html) {
+      // Same sheet, new content (e.g. comments arrived): swap only the inner
+      // part so the frame, its animation and the scroll position stay put.
+      const tpl = document.createElement("template");
+      tpl.innerHTML = html;
+      const nextSheet = tpl.content.querySelector(".sheet");
+      const sheet = current.querySelector(".sheet");
+      sheet.setAttribute("style", nextSheet.getAttribute("style") || "");
+      sheet.querySelector(".inner").replaceWith(nextSheet.querySelector(".inner"));
+      this._wireDialog(current);
+      return;
+    }
+    this._dlgEl.innerHTML = html;
+    const bd = this._dlgEl.querySelector(".backdrop");
+    if (!bd) {
+      if (this._escHandler) window.removeEventListener("keydown", this._escHandler);
+      this._escHandler = null;
+      return;
+    }
+    if (opening) bd.classList.add("anim");
+    bd.addEventListener("click", (ev) => { if (ev.target === bd) this._closeDialog(); });
+    this._wireDialog(bd);
+    if (!this._escHandler) {
+      this._escHandler = (ev) => { if (ev.key === "Escape") this._closeDialog(); };
+      window.addEventListener("keydown", this._escHandler);
+    }
+  }
+
+  _wireDialog(bd) {
+    const x = bd.querySelector(".x"); if (x) x.addEventListener("click", () => this._closeDialog());
+  }
+
+  _wireMain() {
     this.shadowRoot.querySelectorAll(".event.tappable").forEach((el) => {
       const open = () => this._tap(this._shown[Number(el.dataset.i)]);
       el.addEventListener("click", open);
@@ -634,13 +707,6 @@ class TimeTreeCard extends HTMLElement {
     this.shadowRoot.querySelectorAll(".tab").forEach((el) => el.addEventListener("click", () => this._setView(el.dataset.view)));
     this.shadowRoot.querySelectorAll(".mnav button").forEach((el) => el.addEventListener("click", () => this._shiftMonth(Number(el.dataset.m))));
     this.shadowRoot.querySelectorAll(".cell").forEach((el) => el.addEventListener("click", () => { this._selDay = el.dataset.day; this._render(); }));
-    const bd = this.shadowRoot.querySelector(".backdrop");
-    if (bd) {
-      bd.addEventListener("click", (ev) => { if (ev.target === bd) this._closeDialog(); });
-      const x = bd.querySelector(".x"); if (x) x.addEventListener("click", () => this._closeDialog());
-      this._escHandler = (ev) => { if (ev.key === "Escape") this._closeDialog(); };
-      window.addEventListener("keydown", this._escHandler, { once: true });
-    }
   }
 
   _toggleChip(key) {
