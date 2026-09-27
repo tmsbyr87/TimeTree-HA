@@ -83,6 +83,57 @@ Open the entry's **Configure** dialog to set the refresh interval (5–120 minut
 
 Credentials are stored in the config entry, like any other cloud integration in Home Assistant, so the session can be renewed without you. Change your TimeTree password? Home Assistant will prompt you to re-authenticate.
 
+## Dashboard card
+
+The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetree-card`). It is registered automatically — after a restart it simply appears in the card picker. No YAML needed: everything is configurable in the visual editor.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-light.png" alt="Phone, light" width="24%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-dark.png" alt="Phone, dark" width="24%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/tablet-portrait-dark.png" alt="Tablet portrait, dark" width="49%" />
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/tablet-landscape-light.png" alt="Tablet landscape, light" width="49%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/desktop-dark-compact.png" alt="Desktop, dark, compact with amber accent" width="49%" />
+</p>
+
+- **Responsive** — a list on phones, day columns on tablets in landscape and on desktop. Decided by the card's own width (container queries), so it adapts inside any section or grid.
+- **Theme-aware** — uses only Home Assistant theme variables, so light and dark themes just work; pick an accent colour if you like.
+- **Works with any calendar** — not just TimeTree. Add several `calendar.*` entities; each gets its own colour.
+- **Readable at a glance** — *Today* / *Tomorrow* labels, the running event highlighted with *Now*, all-day events first, locations and (optionally) descriptions.
+- **Localised** — German and English, date/time formats follow your Home Assistant locale.
+
+### Options
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `entities` | first `calendar.*` | One or more calendar entities |
+| `title` | Family calendar | Header text |
+| `days` | `7` | How many days ahead to show (1–60) |
+| `max_events` | `30` | Cap on listed events; the rest is summarised as “+ n more” |
+| `layout` | `auto` | `auto` (list ↔ columns by width), `list`, or `columns` |
+| `accent_color` | theme primary | Any CSS colour, e.g. `#2ecc84` |
+| `show_header` / `show_icon` | `true` | Header row and icon |
+| `show_all_day` | `true` | Include all-day events |
+| `show_location` | `true` | Location line under the title |
+| `show_description` | `false` | Two-line description preview |
+| `relative_days` | `true` | “Today” / “Tomorrow” instead of only the date |
+| `compact` | `false` | Tighter spacing and smaller type |
+| `empty_text` | — | Custom text when nothing is coming up |
+| `colors` | built-in palette | Per-entity colours, e.g. `["#2ecc84", "#3b82f6"]` |
+
+```yaml
+type: custom:timetree-card
+entities:
+  - calendar.family
+title: Familienkalender
+days: 7
+layout: auto
+show_description: false
+```
+
+> Running Lovelace in YAML mode? Add `/timetree_card/timetree-card.js` as a *module* resource yourself — the integration logs the exact URL at startup.
+
 ## Using it
 
 The entity behaves like every other Home Assistant calendar:

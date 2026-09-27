@@ -6,6 +6,9 @@ DOMAIN = "timetree"
 
 # Brand assets are served by the integration itself from its brand/ folder.
 STATIC_URL_BASE = "/timetree_static"
+# The bundled Lovelace card lives in www/ and is served under this base.
+CARD_URL_BASE = "/timetree_card"
+CARD_FILENAME = "timetree-card.js"
 
 API_BASE_URL = "https://timetreeapp.com/api/v1"
 API_USER_AGENT = "web/2.1.0/en"
