@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sign in to TimeTree",
+        "description": "Enter the e-mail and password of your TimeTree account. They are stored in Home Assistant so the session can be renewed automatically.",
+        "data": {
+          "email": "E-mail",
+          "password": "Password"
+        }
+      },
+      "calendar": {
+        "title": "Choose a calendar",
+        "description": "Select which TimeTree calendar to add to Home Assistant.",
+        "data": {
+          "calendar_id": "Calendar"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate TimeTree",
+        "description": "The TimeTree session for {email} could not be renewed. Please enter the password again.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "E-mail or password is wrong.",
+      "rate_limited": "TimeTree is rate-limiting login attempts. Please wait a few minutes.",
+      "cannot_connect": "Could not reach TimeTree.",
+      "no_calendars": "This account has no calendars.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This calendar is already configured.",
+      "reauth_successful": "Re-authentication was successful.",
+      "unknown": "Unexpected error."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TimeTree options",
+        "data": {
+          "scan_interval": "Refresh interval"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Bei TimeTree anmelden",
+        "description": "E-Mail und Passwort deines TimeTree-Kontos eingeben. Sie werden in Home Assistant gespeichert, damit die Sitzung automatisch erneuert werden kann.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      },
+      "calendar": {
+        "title": "Kalender auswählen",
+        "description": "Welcher TimeTree-Kalender soll in Home Assistant eingebunden werden?",
+        "data": {
+          "calendar_id": "Kalender"
+        }
+      },
+      "reauth_confirm": {
+        "title": "TimeTree erneut anmelden",
+        "description": "Die TimeTree-Sitzung für {email} konnte nicht erneuert werden. Bitte das Passwort erneut eingeben.",
+        "data": {
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "E-Mail oder Passwort ist falsch.",
+      "rate_limited": "TimeTree begrenzt gerade die Anmeldeversuche. Bitte ein paar Minuten warten.",
+      "cannot_connect": "TimeTree ist nicht erreichbar.",
+      "no_calendars": "Dieses Konto hat keine Kalender.",
+      "unknown": "Unerwarteter Fehler."
+    },
+    "abort": {
+      "already_configured": "Dieser Kalender ist bereits eingerichtet.",
+      "reauth_successful": "Erneute Anmeldung erfolgreich.",
+      "unknown": "Unerwarteter Fehler."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TimeTree-Optionen",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall"
+        }
+      }
+    }
+  }
+}
