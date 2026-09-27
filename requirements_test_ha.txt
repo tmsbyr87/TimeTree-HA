@@ -1,0 +1,2 @@
+pytest-homeassistant-custom-component
+ical>=10.0.0

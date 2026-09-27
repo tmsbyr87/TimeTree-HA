@@ -4,19 +4,12 @@ from __future__ import annotations
 
 import json
 
-from custom_components.timetree.diag import REDACTED, build_diagnostics
+from custom_components.timetree.diag import REDACTED, build_diagnostics, calendar_diagnostics
 
 
-def _payload():
-    return build_diagnostics(
-        entry_data={
-            "email": "someone@example.org",
-            "password": "hunter2-secret",
-            "session_id": "sess-abcdef",
-            "calendar_id": 42,
-            "calendar_name": "Family",
-        },
-        options={"scan_interval": 15},
+def _calendar():
+    return calendar_diagnostics(
+        calendar_id=42,
         raw_events=[
             {"uuid": "u1", "title": "Dentist Anna", "note": "bring card", "location": "Main Street 12",
              "all_day": False, "recurrences": ["RRULE:FREQ=WEEKLY"], "label_id": 3},
@@ -31,23 +24,45 @@ def _payload():
     )
 
 
-def test_credentials_are_redacted():
+def _payload():
+    return build_diagnostics(
+        entry_data={
+            "email": "someone@example.org",
+            "password": "hunter2-secret",
+            "session_id": "sess-abcdef",
+            "calendar_names": {"42": "Smith Family", "7": "Work"},
+        },
+        options={"scan_interval": 15, "calendars": ["42"]},
+        calendars=[_calendar()],
+    )
+
+
+def test_credentials_and_calendar_names_are_redacted():
     data = _payload()["entry"]["data"]
     assert data["email"] == REDACTED
     assert data["password"] == REDACTED
     assert data["session_id"] == REDACTED
-    assert data["calendar_id"] == 42
+    assert data["calendar_names"] == {"42": REDACTED, "7": REDACTED}
 
 
-def test_no_personal_event_content_leaks():
+def test_v1_calendar_name_is_redacted_too():
+    payload = build_diagnostics(
+        entry_data={"calendar_id": 42, "calendar_name": "Smith Family"}, options={}, calendars=[]
+    )
+    assert payload["entry"]["data"] == {"calendar_id": 42, "calendar_name": REDACTED}
+
+
+def test_no_personal_content_leaks():
     dumped = json.dumps(_payload(), ensure_ascii=False)
-    for secret in ("hunter2-secret", "sess-abcdef", "someone@example.org",
+    for secret in ("hunter2-secret", "sess-abcdef", "someone@example.org", "Smith Family", "Work",
                    "Dentist Anna", "bring card", "Main Street 12", "Holiday"):
         assert secret not in dumped, secret
 
 
 def test_counters_and_field_names_are_present():
-    events = _payload()["events"]
+    cal = _payload()["calendars"][0]
+    assert cal["calendar_id"] == 42
+    events = cal["events"]
     assert events["count"] == 2
     assert events["all_day"] == 1
     assert events["recurring"] == 1

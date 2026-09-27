@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -24,7 +25,6 @@ from .api import (
     TimeTreeSessionExpired,
 )
 from .const import (
-    CONF_CALENDAR_ID,
     CONF_EMAIL,
     CONF_PASSWORD,
     CONF_SCAN_INTERVAL,
@@ -66,25 +66,72 @@ def async_get_timetree_session(hass: HomeAssistant) -> aiohttp.ClientSession:
     return session
 
 
+class TimeTreeAccount:
+    """One TimeTree login shared by all calendars of a config entry.
+
+    Every calendar has its own coordinator, but they share one client and
+    therefore one session cookie. When the session dies, the first calendar
+    to notice logs in again; the others simply reuse the new cookie.
+    """
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self.hass = hass
+        self.entry = entry
+        self.client = TimeTreeClient(
+            async_get_timetree_session(hass),
+            session_id=entry.data.get(CONF_SESSION_ID),
+        )
+        self.coordinators: dict[int, TimeTreeCoordinator] = {}
+        # Entry data changes on every session renewal; only option changes
+        # (calendar selection, interval) should reload the entry.
+        self.options_snapshot = dict(entry.options)
+        self._login_lock = asyncio.Lock()
+
+    async def async_relogin(self, failed_session_id: str | None) -> None:
+        """Log in again unless another calendar already renewed the session."""
+        async with self._login_lock:
+            if self.client.session_id and self.client.session_id != failed_session_id:
+                return
+            entry = self.entry
+            try:
+                session_id = await self.client.async_login(
+                    entry.data[CONF_EMAIL], entry.data[CONF_PASSWORD]
+                )
+            except TimeTreeAuthError as err:
+                raise ConfigEntryAuthFailed("TimeTree re-login rejected") from err
+            except TimeTreeConnectionError as err:
+                raise UpdateFailed(f"TimeTree re-login failed: {err}") from err
+            self.hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_SESSION_ID: session_id}
+            )
+            _LOGGER.info("TimeTree session renewed")
+
+
 class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
-    """Fetch TimeTree events incrementally and keep the session alive."""
+    """Fetch one TimeTree calendar's events incrementally."""
 
     config_entry: ConfigEntry
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        account: TimeTreeAccount,
+        calendar_id: int,
+        calendar_name: str,
+    ) -> None:
         minutes = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_{entry.data[CONF_CALENDAR_ID]}",
+            name=f"{DOMAIN}_{calendar_id}",
             update_interval=timedelta(minutes=minutes),
             config_entry=entry,
         )
-        self._client = TimeTreeClient(
-            async_get_timetree_session(hass),
-            session_id=entry.data.get(CONF_SESSION_ID),
-        )
-        self._calendar_id: int = int(entry.data[CONF_CALENDAR_ID])
+        self._account = account
+        self._client = account.client
+        self._calendar_id = int(calendar_id)
+        self.calendar_name = calendar_name
         self.store = EventStore()
         self.api_change_streak = 0
         self.last_error_kind: str | None = None
@@ -116,25 +163,6 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
         """TimeTree calendar id this coordinator syncs."""
         return self._calendar_id
 
-    async def _async_relogin(self) -> None:
-        """Re-authenticate with stored credentials and persist the new cookie."""
-        entry = self.config_entry
-        try:
-            session_id = await self._client.async_login(
-                entry.data[CONF_EMAIL], entry.data[CONF_PASSWORD]
-            )
-        except TimeTreeAuthError as err:
-            raise ConfigEntryAuthFailed("TimeTree re-login rejected") from err
-        except TimeTreeConnectionError as err:
-            raise UpdateFailed(f"TimeTree re-login failed: {err}") from err
-
-        self.hass.config_entries.async_update_entry(
-            entry, data={**entry.data, CONF_SESSION_ID: session_id}
-        )
-        # A fresh session means the old cursor may be stale – start over.
-        self.store.reset()
-        _LOGGER.info("TimeTree session renewed for calendar %s", self._calendar_id)
-
     async def _async_update_data(self) -> EventStore:
         """Pull changes since the last cursor; re-login once if the session died."""
         for attempt in (1, 2):
@@ -147,7 +175,9 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
                     self.last_error_kind = "auth"
                     raise ConfigEntryAuthFailed("TimeTree session could not be renewed")
                 _LOGGER.debug("TimeTree session expired, attempting re-login")
-                await self._async_relogin()
+                await self._account.async_relogin(self._client.session_id)
+                # A fresh session means the old cursor may be stale – start over.
+                self.store.reset()
                 continue
             except TimeTreeApiChanged as err:
                 self._record_api_change(err)

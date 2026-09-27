@@ -73,13 +73,18 @@ Or manually: **HACS → Integrations → ⋮ → Custom repositories** → add `
 1. **Settings → Devices & Services → Add Integration**
 2. Search for **TimeTree**
 3. Enter your TimeTree e-mail and password
-4. Pick the calendar you want to import — one entry per calendar, add more if you like
+4. Tick the calendars you want to import — all of them are preselected
 
-You get a device named after the calendar with a `calendar.<name>` entity.
+You get one entry per TimeTree account and, for every selected calendar, a device named after it with its own `calendar.<name>` entity. All calendars share one login.
 
 ## Configuration
 
-Open the entry's **Configure** dialog to set the refresh interval (5–120 minutes, default 15). Because syncing is incremental, a short interval is cheap.
+Open the entry's **Configure** dialog to
+
+- **add or remove calendars** — calendars you joined later show up here; deselected calendars are removed together with their entities
+- set the **refresh interval** (5–120 minutes, default 15). Because syncing is incremental, a short interval is cheap.
+
+> **Upgrading from 1.3 or older?** Your existing entry is converted to an account entry automatically. The calendar keeps its entity id, history and dashboard cards; use **Configure** to add further calendars of the same account.
 
 Credentials are stored in the config entry, like any other cloud integration in Home Assistant, so the session can be renewed without you. Change your TimeTree password? Home Assistant will prompt you to re-authenticate.
 
@@ -179,6 +184,7 @@ actions:
 | *E-mail or password is wrong* during setup | Log in on [timetreeapp.com](https://timetreeapp.com) with the same credentials; social-login accounts need a password set first |
 | *TimeTree is rate-limiting login attempts* | Wait a few minutes — TimeTree throttles repeated sign-ins |
 | Entity turns `unavailable` | Check **Settings → System → Logs** for `timetree`; a re-auth prompt appears if the session could not be renewed |
+| *This TimeTree account is already configured* | Add further calendars via **Configure** on the existing entry instead of adding the integration again |
 | An event is missing | Memos and birthday entries are intentionally skipped; anything else, open an issue with the log line `Skipping TimeTree event …` |
 
 <details>
@@ -186,7 +192,7 @@ actions:
 
 **Installation:** HACS → Integrationen → ⋮ → *Custom repositories* → `https://github.com/tmsbyr87/TimeTree-HA` (Kategorie *Integration*) → herunterladen → Home Assistant neu starten.
 
-**Einrichtung:** Einstellungen → Geräte & Dienste → Integration hinzufügen → **TimeTree** → E-Mail und Passwort eingeben → Kalender auswählen. Es entsteht eine `calendar.*`-Entität, die sich wie jeder andere HA-Kalender verwenden lässt.
+**Einrichtung:** Einstellungen → Geräte & Dienste → Integration hinzufügen → **TimeTree** → E-Mail und Passwort eingeben → Kalender ankreuzen (mehrere möglich). Pro Kalender entsteht eine `calendar.*`-Entität, die sich wie jeder andere HA-Kalender verwenden lässt. Weitere Kalender und das Aktualisierungsintervall lassen sich später über **Konfigurieren** ändern; bestehende Einträge aus Version 1.3 oder älter werden automatisch übernommen, die Entitäts-ID bleibt gleich.
 
 **Wichtig:** Die Integration nutzt die interne Web-Schnittstelle von TimeTree, weil die offizielle API 2023 abgeschaltet wurde. Ändert TimeTree diese Schnittstelle, kann die Integration bis zu einem Update ausfallen. Memos und Geburtstage werden nicht übernommen.
 
@@ -199,6 +205,13 @@ Issues and pull requests are welcome. The API client, event conversion and sync 
 ```bash
 python -m venv .venv && .venv/bin/pip install ical pytest pytest-asyncio "aiohttp<3.13" aioresponses
 .venv/bin/python -m pytest tests -p asyncio --asyncio-mode=auto
+```
+
+Config flow, migration and setup run against a real Home Assistant core (Python 3.14):
+
+```bash
+python3.14 -m venv .venv-ha && .venv-ha/bin/pip install -r requirements_test_ha.txt
+.venv-ha/bin/python -m pytest tests_ha
 ```
 
 ## Support
