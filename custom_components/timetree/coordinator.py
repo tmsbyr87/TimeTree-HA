@@ -8,7 +8,9 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+import aiohttp
+
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -37,6 +39,23 @@ _LOGGER = logging.getLogger(__name__)
 WINDOW_PAST = timedelta(days=1)
 WINDOW_FUTURE = timedelta(days=90)
 
+_SESSION_KEY = f"{DOMAIN}_http_session"
+
+
+def async_get_timetree_session(hass: HomeAssistant) -> aiohttp.ClientSession:
+    """Return a TimeTree-only HTTP session without a cookie jar.
+
+    Home Assistant's shared session keeps one cookie jar for every
+    integration; TimeTree's session cookie must not live there. This session
+    stores no cookies at all – the client sends its cookie explicitly – and is
+    closed automatically when Home Assistant stops.
+    """
+    session = hass.data.get(_SESSION_KEY)
+    if session is None or session.closed:
+        session = async_create_clientsession(hass, cookie_jar=aiohttp.DummyCookieJar())
+        hass.data[_SESSION_KEY] = session
+    return session
+
 
 class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
     """Fetch TimeTree events incrementally and keep the session alive."""
@@ -53,7 +72,7 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
             config_entry=entry,
         )
         self._client = TimeTreeClient(
-            async_get_clientsession(hass),
+            async_get_timetree_session(hass),
             session_id=entry.data.get(CONF_SESSION_ID),
         )
         self._calendar_id: int = int(entry.data[CONF_CALENDAR_ID])
