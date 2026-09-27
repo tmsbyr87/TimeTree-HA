@@ -5,7 +5,8 @@
 <p align="center">
   <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=tmsbyr87&repository=TimeTree-HA&category=integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge" alt="HACS Custom"></a>
   <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftmsbyr87%2FTimeTree-HA%2Fmain%2Fcustom_components%2Ftimetree%2Fmanifest.json&query=%24.version&label=Version&style=for-the-badge&color=purple" alt="Version">
-  <img src="https://img.shields.io/badge/Home%20Assistant-2024.12%2B-41BDF5?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant 2024.12+">
+  <img src="https://img.shields.io/badge/Home%20Assistant-min.%202024.12-41BDF5?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Minimum Home Assistant 2024.12">
+  <img src="https://img.shields.io/badge/Tested%20with-HA%202026.9-2ECC84?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Tested with Home Assistant 2026.9">
   <a href="https://github.com/tmsbyr87/TimeTree-HA/stargazers"><img src="https://img.shields.io/github/stars/tmsbyr87/TimeTree-HA?style=for-the-badge&label=Stars&color=yellow" alt="Stars"></a>
   <a href="https://github.com/tmsbyr87/TimeTree-HA/commits/main"><img src="https://img.shields.io/github/last-commit/tmsbyr87/TimeTree-HA?style=for-the-badge&label=Updated" alt="Last commit"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/tmsbyr87/TimeTree-HA?style=for-the-badge&color=green" alt="License"></a>
@@ -64,7 +65,7 @@ TimeTree retired its public API on 22 December 2023, and there is no official Ho
 
 ## Prerequisites
 
-- **Home Assistant 2024.12** or later (tested with 2026.9)
+- **Home Assistant 2024.12** or later. Every release is tested against **2026.9**; older versions should work but are not tested.
 - A TimeTree account with **e-mail/password login** (social logins are not supported by the web endpoints this integration uses)
 - [HACS](https://hacs.xyz) for one-click installation *(optional — manual install works too)*
 
