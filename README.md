@@ -108,7 +108,7 @@ The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetr
 - **Readable at a glance** — *Today* / *Tomorrow* labels, the running event highlighted with *Now*, all-day events first, locations and (optionally) descriptions.
 - **Your TimeTree labels** — colours and names come straight from TimeTree. Show them on each event, filter the card to selected labels in the editor, or switch on the **chip bar** so anyone can toggle labels right on the card (remembered per device).
 - **Three views** — *Agenda* (the next days), *Today & tomorrow* (two columns on wide cards, past events dimmed) and *Month* (grid with navigation; tap a day to see its events). Switch on **tabs** and everyone can change the view right on the card; the choice is remembered per device.
-- **Event details** — tapping an event opens a clean detail sheet: date, time and duration, location (opens in Maps), label, notes with clickable links, calendar and the event's **TimeTree comments**. No entity history graphs.
+- **Event details** — tapping an event opens a clean detail sheet: date, time and duration, location (opens in Maps), label, notes with clickable links, calendar, the event's **TimeTree comments** and a hint when the event has photos. No entity history graphs.
 - **Localised** — German and English, date/time formats follow your Home Assistant locale.
 
 <p align="center">
@@ -206,6 +206,25 @@ actions:
       message: "in {{ trigger.event.data.minutes_before }} min"
 ```
 </details>
+
+### Action: `timetree.get_event_details`
+
+Returns an event with its **comments** and **photo links** — handy for notifications or voice assistants. Without `uid` it uses the next upcoming event.
+
+```yaml
+actions:
+  - action: timetree.get_event_details
+    data:
+      entity_id: calendar.family
+      uid: "{{ trigger.event.data.uid }}"   # e.g. from timetree_reminder; omit for the next event
+    response_variable: details
+  - action: notify.mobile_app_phone
+    data:
+      title: "{{ details.event.summary }}"
+      message: "{{ details.comments | map(attribute='content') | join('\n') or 'No comments' }}"
+```
+
+Response: `event` (summary, start, end, location, label, `media_count`), `comments` (`author`, `content`, `created_at`) and `media` (links found in the event's activity). Requests are cached and rate-limited like the card's.
 
 ### Automations with the calendar
 

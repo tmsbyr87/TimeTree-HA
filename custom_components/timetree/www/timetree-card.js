@@ -10,7 +10,7 @@
  * editor based on <ha-form>, so the card can be configured without YAML.
  */
 
-const CARD_VERSION = "1.6.0";
+const CARD_VERSION = "1.6.1";
 const CARD_TAG = "timetree-card";
 const EDITOR_TAG = "timetree-card-editor";
 const REFRESH_MS = 15 * 60 * 1000;
@@ -30,6 +30,7 @@ const STRINGS = {
     viewAgendaShort: "Agenda", viewTodayShort: "2 Tage", viewMonthShort: "Monat",
     prev: "Vorheriger Monat", next: "Nächster Monat", goToday: "Heute",
     comments: "Kommentare", commentsLoading: "Lade Kommentare …", commentsError: "Kommentare nicht verfügbar",
+    photos: (n) => (n === 1 ? "1 Foto" : `${n} Fotos`), photosHint: "in der TimeTree-App ansehen", media: "Fotos",
   },
   en: {
     today: "Today", tomorrow: "Tomorrow", yesterday: "Yesterday", allDay: "All day",
@@ -43,6 +44,7 @@ const STRINGS = {
     viewAgendaShort: "Agenda", viewTodayShort: "2 days", viewMonthShort: "Month",
     prev: "Previous month", next: "Next month", goToday: "Today",
     comments: "Comments", commentsLoading: "Loading comments …", commentsError: "Comments unavailable",
+    photos: (n) => (n === 1 ? "1 photo" : `${n} photos`), photosHint: "view them in the TimeTree app", media: "Photos",
   },
 };
 
@@ -217,6 +219,7 @@ const STYLE = `
   .sheet .v { font-size: 1em; line-height: 1.4; overflow-wrap: anywhere; }
   .sheet .v .pre, .sheet .v.pre { white-space: pre-line; }
   .sheet .v a { color: var(--tt-accent); }
+  .sheet .hint { color: var(--tt-muted); font-size: .9em; }
   .sheet .cm { display: grid; gap: 10px; }
   .sheet .cm .c { background: color-mix(in srgb, var(--primary-text-color) 5%, transparent); border-radius: 12px; padding: 8px 12px; }
   .sheet .cm .who { font-size: .78em; color: var(--tt-muted); margin-bottom: 2px; }
@@ -434,6 +437,7 @@ class TimeTreeCard extends HTMLElement {
       color: (label && label.color) || entityColor, label,
       allDay: s.allDay, start: s.dt, end: e.dt,
       summary: ev.summary || "", location: ev.location || "", description: ev.description || "", uid: ev.uid || "",
+      media: Number.isInteger(ev.media_count) && ev.media_count > 0 ? ev.media_count : 0,
     };
   }
 
@@ -481,10 +485,11 @@ class TimeTreeCard extends HTMLElement {
     const loc = c.show_location && e.location ? `<div class="meta"><ha-icon icon="mdi:map-marker-outline"></ha-icon><span>${esc(e.location)}</span></div>` : "";
     const tag = c.show_label && e.label ? `<div class="tag" style="--c:${esc(e.label.color)}"><span class="sw"></span>${esc(e.label.name)}</div>` : "";
     const desc = c.show_description && e.description ? `<div class="desc">${esc(e.description)}</div>` : "";
+    const media = e.media ? `<div class="meta"><ha-icon icon="mdi:image-multiple-outline"></ha-icon><span>${esc(t("photos", e.media))}</span></div>` : "";
     const i = this._shown.push(e) - 1;
     return `<div class="event${running ? " running" : ""}${past ? " past" : ""}${tappable ? " tappable" : ""}" data-i="${i}" ${tappable ? 'role="button" tabindex="0"' : ""}>
         ${timeHtml}<div class="dot" style="--dot:${esc(e.color)}"></div>
-        <div class="main"><div class="summary">${esc(e.summary)}</div>${loc}${tag}${desc}</div></div>`;
+        <div class="main"><div class="summary">${esc(e.summary)}</div>${loc}${media}${tag}${desc}</div></div>`;
   }
 
   _onDay(events, day) {
@@ -708,6 +713,7 @@ class TimeTreeCard extends HTMLElement {
       e.location ? ["mdi:map-marker-outline", t("where"), `<a href="https://maps.google.com/?q=${encodeURIComponent(e.location)}" target="_blank" rel="noopener noreferrer">${esc(e.location)}</a>`] : null,
       e.label ? ["mdi:tag-outline", t("label"), `<span class="tag" style="--c:${esc(e.label.color)}"><span class="sw"></span>${esc(e.label.name)}</span>`] : null,
       e.description ? ["mdi:text", t("notes"), `<div class="pre">${linkify(e.description)}</div>`] : null,
+      e.media ? ["mdi:image-multiple-outline", t("media"), `${esc(t("photos", e.media))} · <span class="hint">${t("photosHint")}</span>`] : null,
       this._commentsHtml(e),
       ["mdi:calendar", t("calendar"), esc(e.entityName)],
     ].filter(Boolean);
