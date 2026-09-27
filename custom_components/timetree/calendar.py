@@ -75,6 +75,16 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
         )
 
     @property
+    def available(self) -> bool:
+        """Stay available with the last known events while TimeTree hiccups.
+
+        A failed refresh (network, or TimeTree changing its API) should not
+        blank the family calendar; the repair issue tells the user what is
+        going on. Only an entry that never synced is unavailable.
+        """
+        return super().available or self.coordinator.data.count > 0
+
+    @property
     def extra_state_attributes(self) -> dict:
         """Expose the calendar's labels so the bundled card can offer filters."""
         labels = self.coordinator.data.labels

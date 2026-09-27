@@ -29,7 +29,8 @@
       "rate_limited": "TimeTree is rate-limiting login attempts. Please wait a few minutes.",
       "cannot_connect": "Could not reach TimeTree.",
       "no_calendars": "This account has no calendars.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "api_changed": "TimeTree answered with an unknown data format. Please check for an integration update."
     },
     "abort": {
       "already_configured": "This calendar is already configured.",
@@ -45,6 +46,12 @@
           "scan_interval": "Refresh interval"
         }
       }
+    }
+  },
+  "issues": {
+    "api_changed": {
+      "title": "TimeTree changed its web API",
+      "description": "TimeTree answered several times in a row with a data format this integration does not understand. This usually means TimeTree changed its (unofficial) web API. Your calendar keeps its last known events. Please check for an update of the TimeTree integration in HACS, or report it via the link below – attach the diagnostics download, it contains no personal data."
     }
   }
 }

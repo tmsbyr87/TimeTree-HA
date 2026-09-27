@@ -14,7 +14,10 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from homeassistant.helpers import issue_registry as ir
+
 from .api import (
+    TimeTreeApiChanged,
     TimeTreeAuthError,
     TimeTreeClient,
     TimeTreeConnectionError,
@@ -40,6 +43,12 @@ WINDOW_PAST = timedelta(days=1)
 WINDOW_FUTURE = timedelta(days=90)
 
 _SESSION_KEY = f"{DOMAIN}_http_session"
+
+# After this many consecutive "unexpected structure" answers we assume TimeTree
+# changed its web API and raise a repair issue (one blip is not enough).
+API_CHANGE_THRESHOLD = 3
+ISSUE_API_CHANGED = "api_changed"
+ISSUE_TRACKER_URL = "https://github.com/tmsbyr87/TimeTree-HA/issues"
 
 
 def async_get_timetree_session(hass: HomeAssistant) -> aiohttp.ClientSession:
@@ -77,6 +86,30 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
         )
         self._calendar_id: int = int(entry.data[CONF_CALENDAR_ID])
         self.store = EventStore()
+        self.api_change_streak = 0
+        self.last_error_kind: str | None = None
+
+    def _record_api_change(self, err: TimeTreeApiChanged) -> None:
+        self.api_change_streak += 1
+        self.last_error_kind = "api_changed"
+        if self.api_change_streak == API_CHANGE_THRESHOLD:
+            _LOGGER.error("TimeTree answered with an unknown structure %d times: %s", API_CHANGE_THRESHOLD, err)
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                ISSUE_API_CHANGED,
+                is_fixable=False,
+                is_persistent=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key=ISSUE_API_CHANGED,
+                learn_more_url=ISSUE_TRACKER_URL,
+            )
+
+    def _record_success(self) -> None:
+        if self.api_change_streak >= API_CHANGE_THRESHOLD:
+            ir.async_delete_issue(self.hass, DOMAIN, ISSUE_API_CHANGED)
+        self.api_change_streak = 0
+        self.last_error_kind = None
 
     @property
     def calendar_id(self) -> int:
@@ -111,14 +144,20 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
                 )
             except TimeTreeSessionExpired:
                 if attempt == 2:
+                    self.last_error_kind = "auth"
                     raise ConfigEntryAuthFailed("TimeTree session could not be renewed")
                 _LOGGER.debug("TimeTree session expired, attempting re-login")
                 await self._async_relogin()
                 continue
+            except TimeTreeApiChanged as err:
+                self._record_api_change(err)
+                raise UpdateFailed(f"TimeTree answered with an unknown structure: {err}") from err
             except TimeTreeConnectionError as err:
+                self.last_error_kind = "connection"
                 raise UpdateFailed(f"TimeTree unreachable: {err}") from err
 
             self.store.merge(result.events, result.since)
+            self._record_success()
             # Labels are cheap (one small GET) and rarely change; refresh
             # them alongside the events so colours and names stay current.
             try:
