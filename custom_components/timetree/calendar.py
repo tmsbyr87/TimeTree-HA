@@ -70,7 +70,7 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
     def event(self) -> CalendarEvent | None:
         """Return the currently running or next upcoming event."""
         now = dt_util.now()
-        timeline = self.coordinator.data.calendar().timeline_tz(now.tzinfo)
+        timeline = self.coordinator.data.timeline(now.tzinfo)
         for item in timeline.active_after(now):
             return _to_calendar_event(item)
         return None
@@ -79,7 +79,7 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
         self, hass: HomeAssistant, start_date: datetime, end_date: datetime
     ) -> list[CalendarEvent]:
         """Return all (expanded) events overlapping the requested window."""
-        timeline = self.coordinator.data.calendar().timeline_tz(start_date.tzinfo)
+        timeline = self.coordinator.data.timeline(start_date.tzinfo)
         return [
             _to_calendar_event(item)
             for item in timeline.overlapping(start_date, end_date)

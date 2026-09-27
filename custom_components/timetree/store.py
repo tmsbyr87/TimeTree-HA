@@ -7,9 +7,11 @@ calendar entity reads a fully built ``ical.Calendar`` out.
 from __future__ import annotations
 
 import logging
+from datetime import tzinfo
 from typing import Any
 
 from ical.calendar import Calendar
+from ical.timeline import Timeline
 
 from .event import is_deleted, to_ical_event
 
@@ -23,6 +25,9 @@ class EventStore:
         self._raw: dict[str, dict[str, Any]] = {}
         self._cursor: int | None = None
         self._calendar: Calendar | None = None
+        # Expanded timelines are expensive to build (every recurrence gets
+        # unrolled); cache them per timezone until the next merge.
+        self._timelines: dict[str, Timeline] = {}
 
     @property
     def cursor(self) -> int | None:
@@ -39,6 +44,7 @@ class EventStore:
         self._raw.clear()
         self._cursor = None
         self._calendar = None
+        self._timelines.clear()
 
     def merge(self, events: list[dict[str, Any]], cursor: int) -> None:
         """Apply one sync result: upsert live events, drop deleted ones."""
@@ -52,6 +58,14 @@ class EventStore:
                 self._raw[uid] = raw
         self._cursor = cursor
         self._calendar = None
+        self._timelines.clear()
+
+    def timeline(self, tz: tzinfo) -> Timeline:
+        """Return a cached, recurrence-expanded timeline in the given timezone."""
+        key = str(tz)
+        if key not in self._timelines:
+            self._timelines[key] = self.calendar().timeline_tz(tz)
+        return self._timelines[key]
 
     def calendar(self) -> Calendar:
         """Return (and cache) an ical Calendar built from the stored events."""
