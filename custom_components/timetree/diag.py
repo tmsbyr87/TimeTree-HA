@@ -1,8 +1,8 @@
 """Redacted diagnostics payload (no Home Assistant imports, unit-testable).
 
 Diagnostics are meant to be attached to public GitHub issues, so the payload
-contains structure and counters only: no credentials, no session, no event
-titles, notes, locations or label names.
+contains structure and counters only: no credentials, no session, no calendar
+names, no event titles, notes, locations or label names.
 """
 
 from __future__ import annotations
@@ -10,21 +10,35 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from .const import CONF_EMAIL, CONF_PASSWORD, CONF_SESSION_ID
+from .const import (
+    CONF_CALENDAR_NAME,
+    CONF_CALENDAR_NAMES,
+    CONF_EMAIL,
+    CONF_PASSWORD,
+    CONF_SESSION_ID,
+)
 
 REDACTED = "**REDACTED**"
-_SECRET_KEYS = {CONF_EMAIL, CONF_PASSWORD, CONF_SESSION_ID}
+_SECRET_KEYS = {CONF_EMAIL, CONF_PASSWORD, CONF_SESSION_ID, CONF_CALENDAR_NAME}
 
 
 def redact_entry_data(data: dict[str, Any]) -> dict[str, Any]:
-    """Return entry data with credentials replaced by a marker."""
-    return {k: (REDACTED if k in _SECRET_KEYS else v) for k, v in data.items()}
+    """Return entry data with credentials and calendar names replaced by a marker."""
+    redacted: dict[str, Any] = {}
+    for key, value in data.items():
+        if key in _SECRET_KEYS:
+            redacted[key] = REDACTED
+        elif key == CONF_CALENDAR_NAMES and isinstance(value, dict):
+            # keep the ids (they help debugging), drop the names
+            redacted[key] = {cal_id: REDACTED for cal_id in value}
+        else:
+            redacted[key] = value
+    return redacted
 
 
-def build_diagnostics(
+def calendar_diagnostics(
     *,
-    entry_data: dict[str, Any],
-    options: dict[str, Any],
+    calendar_id: int,
     raw_events: list[dict[str, Any]],
     label_count: int,
     window_size: int,
@@ -33,8 +47,8 @@ def build_diagnostics(
     last_error: str | None,
     api_change_streak: int,
 ) -> dict[str, Any]:
-    """Assemble the diagnostics dict from already-collected facts."""
-    keys = Counter()
+    """Counters for one synced calendar."""
+    keys: Counter[str] = Counter()
     all_day = recurring = with_label = with_location = 0
     for raw in raw_events:
         keys.update(raw.keys())
@@ -44,7 +58,7 @@ def build_diagnostics(
         with_location += bool(raw.get("location"))
 
     return {
-        "entry": {"data": redact_entry_data(entry_data), "options": dict(options)},
+        "calendar_id": calendar_id,
         "sync": {
             "last_update_success": last_update_success,
             "last_error": last_error,
@@ -62,4 +76,17 @@ def build_diagnostics(
             "field_names": sorted(keys),
         },
         "labels": {"count": label_count},
+    }
+
+
+def build_diagnostics(
+    *,
+    entry_data: dict[str, Any],
+    options: dict[str, Any],
+    calendars: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Assemble the diagnostics dict from already-collected facts."""
+    return {
+        "entry": {"data": redact_entry_data(entry_data), "options": dict(options)},
+        "calendars": calendars,
     }

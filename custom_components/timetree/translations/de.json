@@ -9,11 +9,11 @@
           "password": "Passwort"
         }
       },
-      "calendar": {
+      "calendars": {
         "title": "Kalender auswählen",
-        "description": "Welcher TimeTree-Kalender soll in Home Assistant eingebunden werden?",
+        "description": "Welche TimeTree-Kalender sollen in Home Assistant eingebunden werden? Jeder Kalender wird eine eigene Kalender-Entität. Die Auswahl lässt sich später über „Konfigurieren“ ändern.",
         "data": {
-          "calendar_id": "Kalender"
+          "calendars": "Kalender"
         }
       },
       "reauth_confirm": {
@@ -30,10 +30,11 @@
       "cannot_connect": "TimeTree ist nicht erreichbar.",
       "no_calendars": "Dieses Konto hat keine Kalender.",
       "unknown": "Unerwarteter Fehler.",
-      "api_changed": "TimeTree hat in einem unbekannten Datenformat geantwortet. Bitte nach einem Update der Integration schauen."
+      "api_changed": "TimeTree hat in einem unbekannten Datenformat geantwortet. Bitte nach einem Update der Integration schauen.",
+      "no_calendar_selected": "Bitte mindestens einen Kalender auswählen."
     },
     "abort": {
-      "already_configured": "Dieser Kalender ist bereits eingerichtet.",
+      "already_configured": "Dieses TimeTree-Konto ist bereits eingerichtet. Kalender lassen sich über „Konfigurieren“ am bestehenden Eintrag hinzufügen oder entfernen.",
       "reauth_successful": "Erneute Anmeldung erfolgreich.",
       "unknown": "Unerwarteter Fehler."
     }
@@ -43,9 +44,14 @@
       "init": {
         "title": "TimeTree-Optionen",
         "data": {
+          "calendars": "Kalender",
           "scan_interval": "Aktualisierungsintervall"
-        }
+        },
+        "description": "Welche Kalender synchronisiert werden und wie oft TimeTree nach Änderungen gefragt wird. Abgewählte Kalender werden samt Entitäten aus Home Assistant entfernt."
       }
+    },
+    "error": {
+      "no_calendar_selected": "Bitte mindestens einen Kalender auswählen."
     }
   },
   "issues": {

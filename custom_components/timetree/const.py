@@ -17,8 +17,14 @@ SESSION_COOKIE = "_session_id"
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
 CONF_SESSION_ID = "session_id"
+# Config entry v1 stored exactly one calendar; kept for the v1 → v2 migration.
 CONF_CALENDAR_ID = "calendar_id"
 CONF_CALENDAR_NAME = "calendar_name"
+# Config entry v2: one entry per TimeTree account.
+#   data["calendar_names"]  {"<calendar id>": "<name>"} – names last seen
+#   options["calendars"]    ["<calendar id>", ...]      – calendars to sync
+CONF_CALENDAR_NAMES = "calendar_names"
+CONF_CALENDARS = "calendars"
 CONF_SCAN_INTERVAL = "scan_interval"
 
 DEFAULT_SCAN_INTERVAL_MINUTES = 15

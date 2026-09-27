@@ -24,7 +24,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import TimeTreeCoordinator
+from .coordinator import TimeTreeAccount, TimeTreeCoordinator
 
 # Any authenticated user may call the view. Recurrence expansion is CPU-bound,
 # so an unbounded range (e.g. 1900–9999) would be a cheap denial of service.
@@ -37,7 +37,14 @@ def _coordinator_for(hass: HomeAssistant, entity_id: str) -> TimeTreeCoordinator
     entry = registry.async_get(entity_id)
     if entry is None or entry.platform != DOMAIN or not entry.config_entry_id:
         return None
-    return hass.data.get(DOMAIN, {}).get(entry.config_entry_id)
+    account: TimeTreeAccount | None = hass.data.get(DOMAIN, {}).get(entry.config_entry_id)
+    if account is None:
+        return None
+    try:
+        calendar_id = int(str(entry.unique_id).removeprefix(f"{DOMAIN}_"))
+    except ValueError:
+        return None
+    return account.coordinators.get(calendar_id)
 
 
 def _serialize_when(value: date | datetime) -> dict[str, str]:

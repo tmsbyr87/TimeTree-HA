@@ -12,8 +12,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_CALENDAR_ID, CONF_CALENDAR_NAME, DOMAIN, STATIC_URL_BASE
-from .coordinator import TimeTreeCoordinator
+from .const import DOMAIN, STATIC_URL_BASE
+from .coordinator import TimeTreeAccount, TimeTreeCoordinator
 
 
 async def async_setup_entry(
@@ -21,9 +21,11 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create the calendar entity for a configured TimeTree calendar."""
-    coordinator: TimeTreeCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([TimeTreeCalendarEntity(coordinator, entry)])
+    """Create one calendar entity per selected TimeTree calendar."""
+    account: TimeTreeAccount = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities(
+        TimeTreeCalendarEntity(coordinator) for coordinator in account.coordinators.values()
+    )
 
 
 def _end_as_datetime(item, tz) -> datetime:
@@ -63,12 +65,14 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
     # Served by the integration itself, see __init__._async_register_brand_assets.
     _attr_entity_picture = f"{STATIC_URL_BASE}/icon.png"
 
-    def __init__(self, coordinator: TimeTreeCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: TimeTreeCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{DOMAIN}_{entry.data[CONF_CALENDAR_ID]}"
+        # Same ids as in 1.0–1.3 (one entry per calendar), so migrated
+        # entities keep their entity_id, history and dashboard references.
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.calendar_id}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, str(entry.data[CONF_CALENDAR_ID]))},
-            name=entry.data.get(CONF_CALENDAR_NAME) or entry.title,
+            identifiers={(DOMAIN, str(coordinator.calendar_id))},
+            name=coordinator.calendar_name,
             manufacturer="TimeTree",
             model="Shared calendar",
             entry_type=DeviceEntryType.SERVICE,
