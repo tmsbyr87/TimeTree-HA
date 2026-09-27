@@ -60,6 +60,24 @@ class TimeTreeCalendarInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class TimeTreeLabel:
+    """A colour label defined in a TimeTree calendar."""
+
+    label_id: int
+    name: str
+    color: str  # "#rrggbb"
+
+
+def _color_to_hex(value: Any) -> str:
+    """TimeTree sends colours as ints; normalise to a CSS hex string."""
+    if isinstance(value, int):
+        return f"#{value & 0xFFFFFF:06x}"
+    if isinstance(value, str) and value:
+        return value if value.startswith("#") else f"#{value}"
+    return "#9e9e9e"
+
+
+@dataclass(frozen=True, slots=True)
 class SyncResult:
     """One page of the incremental event sync."""
 
@@ -164,6 +182,36 @@ class TimeTreeClient:
                     calendar_id=int(cal_id),
                     name=str(cal.get("name") or f"Calendar {cal_id}"),
                 )
+            )
+        return result
+
+    async def async_get_labels(self, calendar_id: int) -> dict[int, TimeTreeLabel]:
+        """Return the calendar's colour labels keyed by label id.
+
+        A missing or failing labels endpoint is not fatal – events still
+        sync – so this returns an empty dict instead of raising for HTTP
+        errors other than an expired session.
+        """
+        try:
+            data = await self._get_json(f"/calendar/{calendar_id}/labels")
+        except TimeTreeSessionExpired:
+            raise
+        except TimeTreeConnectionError as err:
+            _LOGGER.debug("TimeTree labels unavailable for %s: %s", calendar_id, err)
+            return {}
+        result: dict[int, TimeTreeLabel] = {}
+        for raw in data.get("calendar_labels") or data.get("labels") or []:
+            label_id = raw.get("id")
+            if label_id is None:
+                continue
+            try:
+                key = int(label_id)
+            except (TypeError, ValueError):
+                continue
+            result[key] = TimeTreeLabel(
+                label_id=key,
+                name=str(raw.get("name") or f"Label {key}").strip(),
+                color=_color_to_hex(raw.get("color")),
             )
         return result
 

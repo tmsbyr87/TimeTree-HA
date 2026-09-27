@@ -18,6 +18,7 @@ from homeassistant.loader import async_get_integration
 
 from .const import CARD_FILENAME, CARD_URL_BASE, DOMAIN, STATIC_URL_BASE
 from .coordinator import TimeTreeCoordinator
+from .views import TimeTreeEventsView, TimeTreeLabelsView
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ async def _async_register_static_assets(hass: HomeAssistant) -> None:
             StaticPathConfig(CARD_URL_BASE, str(_WWW_DIR), cache_headers=False),
         ]
     )
+    # Label-aware event feed for the bundled card (authenticated).
+    hass.http.register_view(TimeTreeEventsView())
+    hass.http.register_view(TimeTreeLabelsView())
     hass.data[f"{DOMAIN}_static_registered"] = True
 
 

@@ -59,6 +59,11 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
         self._calendar_id: int = int(entry.data[CONF_CALENDAR_ID])
         self.store = EventStore()
 
+    @property
+    def calendar_id(self) -> int:
+        """TimeTree calendar id this coordinator syncs."""
+        return self._calendar_id
+
     async def _async_relogin(self) -> None:
         """Re-authenticate with stored credentials and persist the new cookie."""
         entry = self.config_entry
@@ -95,6 +100,14 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
                 raise UpdateFailed(f"TimeTree unreachable: {err}") from err
 
             self.store.merge(result.events, result.since)
+            # Labels are cheap (one small GET) and rarely change; refresh
+            # them alongside the events so colours and names stay current.
+            try:
+                self.store.set_labels(await self._client.async_get_labels(self._calendar_id))
+            except TimeTreeSessionExpired:
+                raise
+            except TimeTreeConnectionError as err:
+                _LOGGER.debug("Keeping previous TimeTree labels: %s", err)
             # Recurrence expansion is CPU-bound and ``ical`` timelines are
             # lazy, so materialise the window here, off the event loop.
             now = dt_util.now()
