@@ -1,11 +1,16 @@
 {
   "domain": "timetree",
   "name": "TimeTree",
+  "after_dependencies": [
+    "lovelace"
+  ],
   "codeowners": [
     "@tmsbyr87"
   ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://github.com/tmsbyr87/TimeTree-HA",
   "integration_type": "service",
   "iot_class": "cloud_polling",
