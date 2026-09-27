@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=tmsbyr87&repository=TimeTree-HA&category=integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge" alt="HACS Custom"></a>
   <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftmsbyr87%2FTimeTree-HA%2Fmain%2Fcustom_components%2Ftimetree%2Fmanifest.json&query=%24.version&label=Version&style=for-the-badge&color=purple" alt="Version">
-  <img src="https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant 2024.6+">
+  <img src="https://img.shields.io/badge/Home%20Assistant-2024.12%2B-41BDF5?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant 2024.12+">
   <a href="https://github.com/tmsbyr87/TimeTree-HA/stargazers"><img src="https://img.shields.io/github/stars/tmsbyr87/TimeTree-HA?style=for-the-badge&label=Stars&color=yellow" alt="Stars"></a>
   <a href="https://github.com/tmsbyr87/TimeTree-HA/commits/main"><img src="https://img.shields.io/github/last-commit/tmsbyr87/TimeTree-HA?style=for-the-badge&label=Updated" alt="Last commit"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/tmsbyr87/TimeTree-HA?style=for-the-badge&color=green" alt="License"></a>
@@ -20,8 +20,21 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/device.png" alt="TimeTree device page in Home Assistant" width="760" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/today-tomorrow-tablet.png" alt="TimeTree card in Home Assistant: today &amp; tomorrow" width="760" />
 </p>
+
+## Features at a glance
+
+| | |
+| --- | --- |
+| 🔐 **Sign in once** | One entry per TimeTree account, pick any number of calendars; the session renews itself |
+| 📅 **Native calendars** | A `calendar` entity per TimeTree calendar – recurring series, all-day events and time zones done right |
+| 🏷️ **Your labels** | Colours and names from TimeTree; optional calendar per label for automations |
+| 📊 **Sensors** | *Events today* and *Next event*, ready for dashboards and templates |
+| 🔔 **TimeTree reminders** | The alerts you set in TimeTree fire a `timetree_reminder` event – with a ready-made blueprint for push and voice |
+| 💬 **Comments & details** | Event comments in the card's detail sheet and via the `timetree.get_event_details` action |
+| 🗓️ **Dashboard card** | Agenda, *Today & tomorrow* and month view, tabs, label chips – responsive, light & dark |
+| 🛟 **Built to last** | Diagnostics without personal data, a repair notice if TimeTree changes its API, request limits that protect your account |
 
 ## Why this exists
 
@@ -50,7 +63,7 @@ TimeTree retired its public API on 22 December 2023, and there is no official Ho
 
 ## Prerequisites
 
-- **Home Assistant 2024.6** or later
+- **Home Assistant 2024.12** or later (tested with 2026.9)
 - A TimeTree account with **e-mail/password login** (social logins are not supported by the web endpoints this integration uses)
 - [HACS](https://hacs.xyz) for one-click installation *(optional — manual install works too)*
 
@@ -93,13 +106,15 @@ Credentials are stored in the config entry, like any other cloud integration in 
 The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetree-card`). It is registered automatically — after a restart it simply appears in the card picker. No YAML needed: everything is configurable in the visual editor.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-light.png" alt="Phone, light" width="24%" />
-  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-dark.png" alt="Phone, dark" width="24%" />
-  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/tablet-portrait-dark.png" alt="Tablet portrait, dark" width="49%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/month-desktop.png" alt="Month view with tabs and label chips" width="100%" />
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/tablet-landscape-light.png" alt="Tablet landscape, light" width="49%" />
-  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/desktop-dark-compact.png" alt="Desktop, dark, compact with amber accent" width="49%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/today-tomorrow-tablet.png" alt="Today &amp; tomorrow view on a tablet" width="100%" />
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-month-dark.png" alt="Month view on a phone, dark" width="32%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-dialog-comments.png" alt="Event details with comments and photo hint" width="32%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-dark.png" alt="Agenda on a phone, dark" width="32%" />
 </p>
 
 - **Responsive** — a list on phones, day columns on tablets in landscape and on desktop. Decided by the card's own width (container queries), so it adapts inside any section or grid.
@@ -114,7 +129,7 @@ The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetr
 <p align="center">
   <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-labels.png" alt="Label chips" width="24%" />
   <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-labels-filtered.png" alt="Two labels hidden" width="24%" />
-  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-dialog-dark.png" alt="Event detail sheet" width="24%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/tablet-landscape-light.png" alt="Agenda in day columns on a tablet" width="49%" />
 </p>
 
 ### Options
@@ -148,10 +163,11 @@ The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetr
 type: custom:timetree-card
 entities:
   - calendar.family
-title: Familienkalender
+title: Family calendar
 icon: mdi:calendar-heart
+view: agenda        # agenda | today | month
+tabs: true          # let everyone switch views on the card
 days: 7
-layout: auto
 label_filter: true
 tap_action: dialog
 ```
@@ -164,7 +180,7 @@ Labels are read from the calendar entity's `labels` attribute (TimeTree calendar
 
 ## Using it
 
-Every selected calendar becomes a device with these entities:
+Every selected calendar becomes a device with these entities (Home Assistant derives the exact entity ids from your calendar and area names):
 
 | Entity | Enabled | What it is |
 | --- | --- | --- |
@@ -256,15 +272,24 @@ actions:
 | Entity turns `unavailable` | Check **Settings → System → Logs** for `timetree`; a re-auth prompt appears if the session could not be renewed |
 | *This TimeTree account is already configured* | Add further calendars via **Configure** on the existing entry instead of adding the integration again |
 | An event is missing | Memos and birthday entries are intentionally skipped; anything else, open an issue with the log line `Skipping TimeTree event …` |
+| Repair notice *TimeTree changed its web API* | TimeTree answered several times with an unknown format – check HACS for an update; the calendar keeps its last known events meanwhile |
+| A label is missing in the blueprint's list | Enable that label's calendar first (**Settings → Devices & services → TimeTree**), or type the label name instead |
+| Comments show *Too many requests* | The card protects your TimeTree account with a request limit – wait a minute |
+
+**Reporting a problem:** attach the diagnostics (**Settings → Devices & services → TimeTree → ⋮ → Download diagnostics**). They contain counters and field names only – no credentials, calendar names or event content – and are safe to post publicly.
 
 <details>
 <summary><strong>🇩🇪 Kurzanleitung auf Deutsch</strong></summary>
 
 **Installation:** HACS → Integrationen → ⋮ → *Custom repositories* → `https://github.com/tmsbyr87/TimeTree-HA` (Kategorie *Integration*) → herunterladen → Home Assistant neu starten.
 
-**Einrichtung:** Einstellungen → Geräte & Dienste → Integration hinzufügen → **TimeTree** → E-Mail und Passwort eingeben → Kalender ankreuzen (mehrere möglich). Pro Kalender entsteht eine `calendar.*`-Entität, die sich wie jeder andere HA-Kalender verwenden lässt. Dazu kommen die Sensoren „Termine heute“ und „Nächster Termin“ sowie (deaktiviert) je ein Kalender pro TimeTree-Label. In TimeTree gesetzte Erinnerungen lösen das Ereignis `timetree_reminder` aus; der mitgelieferte Blueprint „TimeTree reminder“ macht daraus Push-Nachrichten oder Sprachansagen. Weitere Kalender und das Aktualisierungsintervall lassen sich später über **Konfigurieren** ändern; bestehende Einträge aus Version 1.3 oder älter werden automatisch übernommen, die Entitäts-ID bleibt gleich.
+**Einrichtung:** Einstellungen → Geräte & Dienste → Integration hinzufügen → **TimeTree** → E-Mail und Passwort eingeben → Kalender ankreuzen (mehrere möglich). Pro Kalender entsteht eine `calendar.*`-Entität, die sich wie jeder andere HA-Kalender verwenden lässt. Dazu kommen die Sensoren „Termine heute“ und „Nächster Termin“ sowie (deaktiviert) je ein Kalender pro TimeTree-Label. In TimeTree gesetzte Erinnerungen lösen das Ereignis `timetree_reminder` aus; der mitgelieferte Blueprint „TimeTree reminder“ macht daraus Push-Nachrichten oder Sprachansagen. Mit der Aktion `timetree.get_event_details` holen Automationen einen Termin samt Kommentaren. Weitere Kalender und das Aktualisierungsintervall lassen sich später über **Konfigurieren** ändern; bestehende Einträge aus Version 1.3 oder älter werden automatisch übernommen, die Entitäts-ID bleibt gleich.
 
-**Wichtig:** Die Integration nutzt die interne Web-Schnittstelle von TimeTree, weil die offizielle API 2023 abgeschaltet wurde. Ändert TimeTree diese Schnittstelle, kann die Integration bis zu einem Update ausfallen. Memos und Geburtstage werden nicht übernommen.
+**Karte:** Die mitgelieferte Karte *TimeTree Agenda* erscheint nach dem Neustart automatisch in der Kartenauswahl – mit den Ansichten Agenda, Heute & Morgen und Monat (optional per Reiter umschaltbar), Label-Filter und Detail-Dialog mit Kommentaren. Hell/dunkel, Handy, Tablet und Desktop.
+
+**Erinnerungen:** Labels im Blueprint per Liste auswählen (dazu den Label-Kalender einmal aktivieren) oder den Namen eintippen – es sind immer die eigenen Labels aus TimeTree.
+
+**Hinweis:** Die Integration nutzt die interne Web-Schnittstelle von TimeTree, weil die offizielle API 2023 abgeschaltet wurde. Ändert TimeTree diese Schnittstelle, kann die Integration bis zu einem Update ausfallen. Memos und Geburtstage werden nicht übernommen.
 
 </details>
 
