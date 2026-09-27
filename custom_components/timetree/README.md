@@ -101,7 +101,15 @@ The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetr
 - **Theme-aware** — uses only Home Assistant theme variables, so light and dark themes just work; pick an accent colour if you like.
 - **Works with any calendar** — not just TimeTree. Add several `calendar.*` entities; each gets its own colour.
 - **Readable at a glance** — *Today* / *Tomorrow* labels, the running event highlighted with *Now*, all-day events first, locations and (optionally) descriptions.
+- **Your TimeTree labels** — colours and names come straight from TimeTree. Show them on each event, filter the card to selected labels in the editor, or switch on the **chip bar** so anyone can toggle labels right on the card (remembered per device).
+- **Event details** — tapping an event opens a clean detail sheet: date, time and duration, location (opens in Maps), label, notes with clickable links, calendar. No entity history graphs.
 - **Localised** — German and English, date/time formats follow your Home Assistant locale.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-labels.png" alt="Label chips" width="24%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-labels-filtered.png" alt="Two labels hidden" width="24%" />
+  <img src="https://raw.githubusercontent.com/tmsbyr87/TimeTree-HA/main/assets/screenshots/card/phone-dialog-dark.png" alt="Event detail sheet" width="24%" />
+</p>
 
 ### Options
 
@@ -109,10 +117,15 @@ The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetr
 | --- | --- | --- |
 | `entities` | first `calendar.*` | One or more calendar entities |
 | `title` | Family calendar | Header text |
+| `icon` | TimeTree logo | Any `mdi:` icon for the header |
 | `days` | `7` | How many days ahead to show (1–60) |
 | `max_events` | `30` | Cap on listed events; the rest is summarised as “+ n more” |
 | `layout` | `auto` | `auto` (list ↔ columns by width), `list`, or `columns` |
+| `tap_action` | `dialog` | `dialog` (detail sheet), `more-info` (entity dialog), `none` |
 | `accent_color` | theme primary | Any CSS colour, e.g. `#2ecc84` |
+| `labels` | all | Only show events with these TimeTree label ids (multi-select in the editor) |
+| `label_filter` | `false` | Chip bar on the card to toggle labels; choice is remembered per browser |
+| `show_label` | `true` | Label tag under each event |
 | `show_header` / `show_icon` | `true` | Header row and icon |
 | `show_all_day` | `true` | Include all-day events |
 | `show_location` | `true` | Location line under the title |
@@ -120,17 +133,21 @@ The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetr
 | `relative_days` | `true` | “Today” / “Tomorrow” instead of only the date |
 | `compact` | `false` | Tighter spacing and smaller type |
 | `empty_text` | — | Custom text when nothing is coming up |
-| `colors` | built-in palette | Per-entity colours, e.g. `["#2ecc84", "#3b82f6"]` |
+| `colors` | built-in palette | Per-entity colours for calendars without labels, e.g. `["#2ecc84", "#3b82f6"]` |
 
 ```yaml
 type: custom:timetree-card
 entities:
   - calendar.family
 title: Familienkalender
+icon: mdi:calendar-heart
 days: 7
 layout: auto
-show_description: false
+label_filter: true
+tap_action: dialog
 ```
+
+Labels are read from the calendar entity's `labels` attribute (TimeTree calendars only); events are fetched from `/api/timetree/events/<entity>` so each one carries its label. Other calendar integrations fall back to Home Assistant's standard calendar API and simply have no labels.
 
 > Running Lovelace in YAML mode? Add `/timetree_card/timetree-card.js` as a *module* resource yourself — the integration logs the exact URL at startup.
 

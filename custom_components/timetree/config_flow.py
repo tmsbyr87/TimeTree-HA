@@ -15,7 +15,6 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -50,6 +49,7 @@ from .const import (
     MAX_SCAN_INTERVAL_MINUTES,
     MIN_SCAN_INTERVAL_MINUTES,
 )
+from .coordinator import async_get_timetree_session
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ async def _async_login_and_list(
     flow: ConfigFlow, email: str, password: str
 ) -> tuple[str, list[TimeTreeCalendarInfo]]:
     """Log in and fetch calendars. Returns (session_id, calendars)."""
-    client = TimeTreeClient(async_get_clientsession(flow.hass))
+    client = TimeTreeClient(async_get_timetree_session(flow.hass))
     session_id = await client.async_login(email, password)
     calendars = await client.async_list_calendars()
     return session_id, calendars

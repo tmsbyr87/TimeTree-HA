@@ -12,7 +12,7 @@ and adds ``label_id`` plus ``label`` ``{id, name, color}`` per occurrence.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from http import HTTPStatus
 from typing import Any
 
@@ -25,6 +25,11 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import TimeTreeCoordinator
+
+# Any authenticated user may call the view. Recurrence expansion is CPU-bound,
+# so an unbounded range (e.g. 1900–9999) would be a cheap denial of service.
+DEFAULT_RANGE = timedelta(days=7)
+MAX_RANGE = timedelta(days=400)
 
 
 def _coordinator_for(hass: HomeAssistant, entity_id: str) -> TimeTreeCoordinator | None:
@@ -66,11 +71,14 @@ class TimeTreeEventsView(HomeAssistantView):
         if coordinator is None:
             return self.json_message("Not a TimeTree calendar", HTTPStatus.NOT_FOUND)
 
-        now = dt_util.now()
-        start = _parse_bound(request.query.get("start"), now)
-        end = _parse_bound(request.query.get("end"), start + (now - now) + __import__("datetime").timedelta(days=7))
+        start = _parse_bound(request.query.get("start"), dt_util.now())
+        end = _parse_bound(request.query.get("end"), start + DEFAULT_RANGE)
         if end <= start:
             return self.json_message("end must be after start", HTTPStatus.BAD_REQUEST)
+        if end - start > MAX_RANGE:
+            return self.json_message(
+                f"range too large (max {MAX_RANGE.days} days)", HTTPStatus.BAD_REQUEST
+            )
 
         store = coordinator.data
         timeline = store.timeline(start.tzinfo)

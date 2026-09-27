@@ -10,7 +10,7 @@
  * editor based on <ha-form>, so the card can be configured without YAML.
  */
 
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.2.1";
 const CARD_TAG = "timetree-card";
 const EDITOR_TAG = "timetree-card-editor";
 const REFRESH_MS = 15 * 60 * 1000;
@@ -188,6 +188,17 @@ function lang(hass) {
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+// Colours are interpolated into style attributes. Escaping alone would still
+// allow extra declarations ("red; background:url(...)"), so only accept plain
+// hex colours for data coming from calendars, and a single validated CSS
+// colour for the user's own accent setting.
+const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const safeHex = (v, fallback = "#9e9e9e") => (typeof v === "string" && HEX_RE.test(v.trim()) ? v.trim() : fallback);
+const safeCssColor = (v) => {
+  if (typeof v !== "string" || !v.trim() || /[;{}()<>"'\\]/.test(v.replace(/^(rgb|rgba|hsl|hsla)\([^()]*\)$/i, ""))) return "";
+  try { return window.CSS && CSS.supports("color", v.trim()) ? v.trim() : ""; } catch (_) { return ""; }
+};
+
 function linkify(text) {
   // escape first, then turn URLs into links
   return esc(text).replace(/(https?:\/\/[^\s<]+)/g, (m) => `<a href="${m}" target="_blank" rel="noopener">${m}</a>`);
@@ -205,7 +216,7 @@ function labelsOf(hass, entities) {
   for (const e of entities || []) {
     const st = hass && hass.states && hass.states[e];
     for (const l of (st && st.attributes && st.attributes.labels) || []) {
-      if (l && l.id !== undefined && !out.has(labelKey(l.id))) out.set(labelKey(l.id), { id: l.id, name: l.name, color: l.color });
+      if (l && l.id !== undefined && !out.has(labelKey(l.id))) out.set(labelKey(l.id), { id: l.id, name: l.name, color: safeHex(l.color) });
     }
   }
   return [...out.values()];
@@ -308,8 +319,8 @@ class TimeTreeCard extends HTMLElement {
   _normalize(ev, entity, idx) {
     const s = parseHaDate(ev.start); const e = parseHaDate(ev.end);
     if (!s || !e) return null;
-    const entityColor = (this._config.colors && this._config.colors[idx]) || PALETTE[idx % PALETTE.length];
-    const label = ev.label && ev.label.id !== undefined ? { id: ev.label.id, name: ev.label.name, color: ev.label.color } : null;
+    const entityColor = safeHex(this._config.colors && this._config.colors[idx], PALETTE[idx % PALETTE.length]);
+    const label = ev.label && ev.label.id !== undefined ? { id: ev.label.id, name: ev.label.name, color: safeHex(ev.label.color) } : null;
     const st = this._hass.states[entity];
     return {
       entity, entityName: (st && st.attributes && st.attributes.friendly_name) || entity,
@@ -374,7 +385,8 @@ class TimeTreeCard extends HTMLElement {
     for (const g of groups.values()) g.items.sort((a, b) => (a.allDay === b.allDay ? a.start - b.start : a.allDay ? -1 : 1));
 
     const title = c.title || t("title");
-    const accent = c.accent_color ? `--timetree-accent:${esc(c.accent_color)};` : "";
+    const accentColor = safeCssColor(c.accent_color);
+    const accent = accentColor ? `--timetree-accent:${esc(accentColor)};` : "";
     const layoutClass = `layout-${c.layout === "columns" ? "columns" : c.layout === "list" ? "list" : "auto"}`;
     const iconHtml = c.show_icon
       ? `<div class="icon">${c.icon ? `<ha-icon icon="${esc(c.icon)}"></ha-icon>`

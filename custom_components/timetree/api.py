@@ -8,6 +8,7 @@ app as documented by the eoleedi/TimeTree-Exporter project.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -68,13 +69,25 @@ class TimeTreeLabel:
     color: str  # "#rrggbb"
 
 
+_HEX_COLOR = re.compile(r"^#?([0-9a-fA-F]{6})$")
+_FALLBACK_COLOR = "#9e9e9e"
+
+
 def _color_to_hex(value: Any) -> str:
-    """TimeTree sends colours as ints; normalise to a CSS hex string."""
+    """Normalise a TimeTree colour to a strict ``#rrggbb`` string.
+
+    Colours end up in CSS on the dashboard, so anything that is not a plain
+    6-digit hex value is replaced by a neutral grey (no CSS injection).
+    """
+    if isinstance(value, bool):
+        return _FALLBACK_COLOR
     if isinstance(value, int):
         return f"#{value & 0xFFFFFF:06x}"
-    if isinstance(value, str) and value:
-        return value if value.startswith("#") else f"#{value}"
-    return "#9e9e9e"
+    if isinstance(value, str):
+        match = _HEX_COLOR.match(value.strip())
+        if match:
+            return f"#{match.group(1).lower()}"
+    return _FALLBACK_COLOR
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,10 +121,17 @@ class TimeTreeClient:
             "X-Timetreea": API_USER_AGENT,
         }
 
-    def _cookies(self) -> dict[str, str]:
-        if self._session_id is None:
-            return {}
-        return {SESSION_COOKIE: self._session_id}
+    def _auth_headers(self) -> dict[str, str]:
+        """Headers for authenticated calls.
+
+        The session cookie is sent as an explicit header instead of going
+        through a cookie jar, so it never lands in a jar shared with other
+        integrations and two TimeTree accounts can never mix sessions.
+        """
+        headers = self._headers()
+        if self._session_id is not None:
+            headers["Cookie"] = f"{SESSION_COOKIE}={self._session_id}"
+        return headers
 
     async def async_login(self, email: str, password: str) -> str:
         """Log in and store the returned session cookie.
@@ -156,15 +176,15 @@ class TimeTreeClient:
         try:
             async with self._session.get(
                 f"{API_BASE_URL}{path}",
-                headers=self._headers(),
-                cookies=self._cookies(),
+                headers=self._auth_headers(),
                 timeout=_TIMEOUT,
             ) as resp:
                 if resp.status in (401, 403):
                     raise TimeTreeSessionExpired(f"HTTP {resp.status}")
                 if resp.status != 200:
-                    text = await resp.text()
-                    raise TimeTreeConnectionError(f"HTTP {resp.status}: {text[:200]}")
+                    # Deliberately no response body: it could contain calendar
+                    # content and would end up in logs / repair issues.
+                    raise TimeTreeConnectionError(f"HTTP {resp.status} for {path.split('?')[0]}")
                 return await resp.json(content_type=None)
         except aiohttp.ClientError as err:
             raise TimeTreeConnectionError(str(err)) from err
