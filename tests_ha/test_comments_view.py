@@ -81,3 +81,22 @@ async def test_on_demand_budget_limits_upstream_calls(hass: HomeAssistant, fake_
     assert 429 in statuses
     # members (1) + activities: never more upstream calls than the budget
     assert fake_client.activity_calls + 1 <= ON_DEMAND_BUDGET
+
+
+async def test_event_details_action(hass: HomeAssistant, fake_client) -> None:
+    import pytest
+    from homeassistant.exceptions import ServiceValidationError
+
+    await _setup(hass)
+    result = await hass.services.async_call(
+        "timetree", "get_event_details", {"entity_id": "calendar.family"}, blocking=True, return_response=True
+    )
+    assert result["event"]["uid"] == "42-1" and result["event"]["summary"] == "Event 42"
+    assert result["comments"][0]["author"] == "Anna"
+    assert result["media"] == []
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            "timetree", "get_event_details", {"entity_id": "calendar.family", "uid": "nope"},
+            blocking=True, return_response=True,
+        )

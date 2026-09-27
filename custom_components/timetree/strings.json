@@ -69,5 +69,35 @@
         "name": "Next event"
       }
     }
+  },
+  "services": {
+    "get_event_details": {
+      "name": "Get event details",
+      "description": "Returns an event of a TimeTree calendar with its comments and photo links. Without an event id, the next upcoming event is used.",
+      "fields": {
+        "entity_id": {
+          "name": "Calendar",
+          "description": "A TimeTree calendar entity."
+        },
+        "uid": {
+          "name": "Event id",
+          "description": "The event's uid (e.g. from a calendar trigger or the timetree_reminder event). Leave empty for the next event."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "not_a_timetree_calendar": {
+      "message": "This entity is not a TimeTree calendar."
+    },
+    "unknown_event": {
+      "message": "This event is not part of the calendar."
+    },
+    "busy": {
+      "message": "Too many requests to TimeTree – try again in a minute."
+    },
+    "unavailable": {
+      "message": "TimeTree is not reachable right now."
+    }
   }
 }

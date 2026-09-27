@@ -21,7 +21,6 @@ from aiohttp import web
 
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 from .api import TimeTreeBusy, TimeTreeError
 from .comments import UID_RE
 from .const import DOMAIN
-from .coordinator import TimeTreeAccount, TimeTreeCoordinator
+from .coordinator import TimeTreeCoordinator, coordinator_for_entity
 
 # Any authenticated user may call the view. Recurrence expansion is CPU-bound,
 # so an unbounded range (e.g. 1900–9999) would be a cheap denial of service.
@@ -38,19 +37,7 @@ MAX_RANGE = timedelta(days=400)
 
 
 def _coordinator_for(hass: HomeAssistant, entity_id: str) -> TimeTreeCoordinator | None:
-    registry = er.async_get(hass)
-    entry = registry.async_get(entity_id)
-    if entry is None or entry.platform != DOMAIN or not entry.config_entry_id:
-        return None
-    account: TimeTreeAccount | None = hass.data.get(DOMAIN, {}).get(entry.config_entry_id)
-    if account is None:
-        return None
-    # "timetree_<calendar>" or "timetree_<calendar>_label_<label>"
-    try:
-        calendar_id = int(str(entry.unique_id).split("_")[1])
-    except (IndexError, ValueError):
-        return None
-    return account.coordinators.get(calendar_id)
+    return coordinator_for_entity(hass, entity_id)
 
 
 def _serialize_when(value: date | datetime) -> dict[str, str]:
@@ -110,6 +97,7 @@ class TimeTreeEventsView(HomeAssistantView):
                     "end": _serialize_when(item.dtend),
                     "recurrence_id": item.recurrence_id,
                     "label_id": store.label_id_of(item.uid) if item.uid else None,
+                    "media_count": store.media_count_of(item.uid) if item.uid else 0,
                     "label": (
                         {"id": label.label_id, "name": label.name, "color": label.color}
                         if label

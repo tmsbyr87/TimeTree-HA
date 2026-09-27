@@ -69,5 +69,35 @@
         "name": "Nächster Termin"
       }
     }
+  },
+  "services": {
+    "get_event_details": {
+      "name": "Termindetails abrufen",
+      "description": "Liefert einen Termin eines TimeTree-Kalenders mit Kommentaren und Foto-Links. Ohne Termin-ID wird der nächste anstehende Termin verwendet.",
+      "fields": {
+        "entity_id": {
+          "name": "Kalender",
+          "description": "Eine TimeTree-Kalender-Entität."
+        },
+        "uid": {
+          "name": "Termin-ID",
+          "description": "Die uid des Termins (z. B. aus einem Kalender-Auslöser oder dem Ereignis timetree_reminder). Leer lassen für den nächsten Termin."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "not_a_timetree_calendar": {
+      "message": "Diese Entität ist kein TimeTree-Kalender."
+    },
+    "unknown_event": {
+      "message": "Dieser Termin gehört nicht zu diesem Kalender."
+    },
+    "busy": {
+      "message": "Zu viele Anfragen an TimeTree – bitte in einer Minute erneut versuchen."
+    },
+    "unavailable": {
+      "message": "TimeTree ist gerade nicht erreichbar."
+    }
   }
 }

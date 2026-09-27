@@ -1,0 +1,14 @@
+get_event_details:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          filter:
+            - integration: timetree
+              domain: calendar
+    uid:
+      required: false
+      example: "0f8e2c1a-4b7d-4a55-9d61-3c2b1a0e9f77"
+      selector:
+        text:

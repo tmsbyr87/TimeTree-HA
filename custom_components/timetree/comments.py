@@ -60,3 +60,32 @@ def comments_from_activities(
         )
     result.sort(key=lambda c: c["created_at"] or "")
     return result[-MAX_COMMENTS:]
+
+
+_URL_RE = re.compile(r"^https://[^\s\"'<>]{1,2048}$")
+
+
+def media_candidates(activities: list[dict[str, Any]], limit: int = 50) -> list[dict[str, Any]]:
+    """Every https URL inside activity attachments, with where it was found.
+
+    TimeTree's photo format is not documented; this lists candidates so the
+    structure can be inspected (service response only, never diagnostics).
+    """
+    found: list[dict[str, Any]] = []
+
+    def walk(value: Any, path: str, activity: dict[str, Any]) -> None:
+        if len(found) >= limit:
+            return
+        if isinstance(value, dict):
+            for key, child in value.items():
+                walk(child, f"{path}.{key}", activity)
+        elif isinstance(value, list):
+            for index, child in enumerate(value[:20]):
+                walk(child, f"{path}[{index}]", activity)
+        elif isinstance(value, str) and _URL_RE.match(value):
+            found.append({"activity_type": activity.get("type"), "path": path, "url": value})
+
+    for activity in activities:
+        if not activity.get("deactivated_at"):
+            walk(activity.get("attachment"), "attachment", activity)
+    return found

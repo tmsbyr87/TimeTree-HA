@@ -13,17 +13,31 @@ from pathlib import Path
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+import voluptuous as vol
+
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
 
 from .const import CARD_FILENAME, CARD_URL_BASE, DOMAIN, STATIC_URL_BASE
-from .coordinator import TimeTreeAccount, TimeTreeCoordinator
+from .api import TimeTreeBusy, TimeTreeError
+from .comments import UID_RE
+from .coordinator import TimeTreeAccount, TimeTreeCoordinator, coordinator_for_entity
+from .insights import describe, next_event
 from .entry_data import account_unique_id, migrate_v1, selected_calendars
 from .views import TimeTreeCommentsView, TimeTreeEventsView, TimeTreeLabelsView
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+SERVICE_EVENT_DETAILS = "get_event_details"
+SERVICE_EVENT_DETAILS_SCHEMA = vol.Schema(
+    {vol.Required("entity_id"): cv.entity_id, vol.Optional("uid"): cv.string}
+)
 
 PLATFORMS: list[Platform] = [Platform.CALENDAR, Platform.SENSOR]
 _BRAND_DIR = Path(__file__).parent / "brand"
@@ -86,6 +100,51 @@ async def _async_register_card_resource(hass: HomeAssistant) -> None:
         await resources.async_create_item({"res_type": "module", "url": url})
         _LOGGER.info("Registered TimeTree card resource %s", url)
     hass.data[f"{DOMAIN}_resource_registered"] = True
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Register the integration-wide actions."""
+
+    async def _event_details(call: ServiceCall) -> ServiceResponse:
+        coordinator = coordinator_for_entity(hass, call.data["entity_id"])
+        if coordinator is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="not_a_timetree_calendar"
+            )
+        store = coordinator.data
+        uid = call.data.get("uid")
+        if uid is None:
+            item = next_event(store.window, dt_util.now())
+            if item is None:
+                return {"event": None, "comments": [], "media": []}
+            uid = item.uid
+        if not UID_RE.match(uid) or not store.has(uid):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="unknown_event")
+        try:
+            activity = await coordinator.async_get_activity(uid)
+        except TimeTreeBusy as err:
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="busy") from err
+        except TimeTreeError as err:
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="unavailable") from err
+        occurrence = next((i for i in store.window if i.uid == uid), None)
+        tz = dt_util.get_default_time_zone()
+        return {
+            "event": (
+                describe(occurrence, tz, store.label_of(uid)) if occurrence else {"uid": uid}
+            )
+            | {"media_count": store.media_count_of(uid)},
+            "comments": activity["comments"],
+            "media": activity["media"],
+        }
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_EVENT_DETAILS,
+        _event_details,
+        schema=SERVICE_EVENT_DETAILS_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    return True
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

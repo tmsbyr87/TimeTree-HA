@@ -65,6 +65,16 @@ class EventStore:
         """Whether an event with this uid is part of the calendar."""
         return uid in self._raw
 
+    def media_count_of(self, uid: str) -> int:
+        """Number of photos/media TimeTree reports for an event (0 if unknown)."""
+        raw = self._raw.get(uid)
+        value = raw.get("media_content_count") if raw else None
+        return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+    def uids_with_media(self, limit: int = 3) -> list[str]:
+        """Some event uids that carry media (for debugging new TimeTree features)."""
+        return [uid for uid in self._raw if self.media_count_of(uid)][:limit]
+
     def alerts_of(self, uid: str) -> list[int]:
         """TimeTree reminders of an event as minutes before its start."""
         raw = self._raw.get(uid)

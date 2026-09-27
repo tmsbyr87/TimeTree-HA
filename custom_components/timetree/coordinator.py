@@ -36,7 +36,7 @@ from .const import (
     DOMAIN,
     EVENT_REMINDER,
 )
-from .comments import comments_from_activities, member_names
+from .comments import comments_from_activities, media_candidates, member_names
 from .insights import describe, due_reminders
 from .store import EventStore
 
@@ -196,7 +196,7 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
         # Comments are fetched on demand (detail dialog) and cached briefly.
         self._members: dict[str, str] = {}
         self._members_at: datetime | None = None
-        self._comments: dict[str, tuple[datetime, list[dict] | None]] = {}
+        self._comments: dict[str, tuple[datetime, dict | None]] = {}
         self._pending: dict[str, asyncio.Task] = {}
         # Field names (never values) seen in on-demand answers, for diagnostics.
         self.shape_hints: dict[str, set[str]] = {}
@@ -224,7 +224,11 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
             self._comments.pop(next(iter(self._comments)))  # evict the oldest entry
 
     async def async_get_comments(self, uid: str) -> list[dict]:
-        """Comments of one event of this calendar.
+        """Comments of one event (see :meth:`async_get_activity`)."""
+        return (await self.async_get_activity(uid))["comments"]
+
+    async def async_get_activity(self, uid: str) -> dict:
+        """Comments (and media candidates) of one event of this calendar.
 
         Protects the shared TimeTree account against request floods from the
         dashboard: answers are cached, failures are cached briefly, parallel
@@ -246,7 +250,7 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
             pending.add_done_callback(lambda _: self._pending.pop(uid, None))
         return await asyncio.shield(pending)
 
-    async def _async_fetch_comments(self, uid: str) -> list[dict]:
+    async def _async_fetch_comments(self, uid: str) -> dict:
         now = dt_util.utcnow()
         try:
             if self._members_at is None or now - self._members_at > MEMBER_CACHE:
@@ -271,9 +275,12 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
             "activity_attachment_keys",
             [a["attachment"] for a in activities if isinstance(a.get("attachment"), dict)],
         )
-        comments = comments_from_activities(activities, self._members)
-        self._cache_put(uid, now, comments)
-        return comments
+        result = {
+            "comments": comments_from_activities(activities, self._members),
+            "media": media_candidates(activities),
+        }
+        self._cache_put(uid, now, result)
+        return result
 
     def async_tick(self, now: datetime) -> None:
         """Fire reminders that became due since the last tick, then refresh listeners."""
@@ -368,6 +375,8 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
             await self.hass.async_add_executor_job(
                 self.store.build_window, now.tzinfo, now - WINDOW_PAST, now + WINDOW_FUTURE
             )
+            if _LOGGER.isEnabledFor(logging.DEBUG):
+                _LOGGER.debug("TimeTree events with media (sample): %s", self.store.uids_with_media())
             _LOGGER.debug(
                 "TimeTree sync: %d changes, %d events held, %d occurrences in window, cursor %s",
                 len(result.events),
@@ -378,3 +387,19 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
             return self.store
 
         raise UpdateFailed("TimeTree sync gave up")  # pragma: no cover
+
+
+def coordinator_for_entity(hass: HomeAssistant, entity_id: str) -> TimeTreeCoordinator | None:
+    """Coordinator behind a TimeTree calendar entity (incl. label calendars)."""
+    entry = er.async_get(hass).async_get(entity_id)
+    if entry is None or entry.platform != DOMAIN or not entry.config_entry_id:
+        return None
+    account: TimeTreeAccount | None = hass.data.get(DOMAIN, {}).get(entry.config_entry_id)
+    if account is None:
+        return None
+    # "timetree_<calendar>" or "timetree_<calendar>_label_<label>" / "_<sensor>"
+    try:
+        calendar_id = int(str(entry.unique_id).split("_")[1])
+    except (IndexError, ValueError):
+        return None
+    return account.coordinators.get(calendar_id)
