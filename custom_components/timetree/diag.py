@@ -46,9 +46,11 @@ def calendar_diagnostics(
     last_update_success: bool,
     last_error: str | None,
     api_change_streak: int,
+    shape_hints: dict[str, set[str]] | None = None,
 ) -> dict[str, Any]:
     """Counters for one synced calendar."""
     keys: Counter[str] = Counter()
+    nested: dict[str, set[str]] = {"event_files_keys": set(), "event_attachment_keys": set()}
     all_day = recurring = with_label = with_location = with_alerts = 0
     for raw in raw_events:
         keys.update(raw.keys())
@@ -57,6 +59,13 @@ def calendar_diagnostics(
         with_label += raw.get("label_id") is not None
         with_location += bool(raw.get("location"))
         with_alerts += bool(raw.get("alerts"))
+        files = raw.get("files")
+        if isinstance(files, list):
+            for item in files[:20]:
+                if isinstance(item, dict):
+                    nested["event_files_keys"].update(str(k) for k in item)
+        if isinstance(raw.get("attachment"), dict):
+            nested["event_attachment_keys"].update(str(k) for k in raw["attachment"])
 
     return {
         "calendar_id": calendar_id,
@@ -78,6 +87,11 @@ def calendar_diagnostics(
             "field_names": sorted(keys),
         },
         "labels": {"count": label_count},
+        # key names only – needed to support new TimeTree features safely
+        "shapes": {
+            **{k: sorted(v) for k, v in nested.items()},
+            **{k: sorted(v) for k, v in (shape_hints or {}).items()},
+        },
     }
 
 

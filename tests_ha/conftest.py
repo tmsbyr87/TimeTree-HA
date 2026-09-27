@@ -6,6 +6,7 @@ real config flow, migration, coordinators and entities without network.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -90,6 +91,24 @@ class FakeClient:
             raise TimeTreeSessionExpired("expired")
         return SyncResult(events=[_event(f"{calendar_id}-1", f"Event {calendar_id}")], since=1, has_more=False)
 
+    activity_calls = 0
+
+    async def async_get_members(self, calendar_id: int) -> list[dict]:
+        return [{"id": 11, "user_id": 901, "name": "Anna"}]
+
+    activity_error: Exception | None = None
+
+    async def async_get_activities(self, calendar_id: int, event_uuid: str) -> list[dict]:
+        FakeClient.activity_calls += 1
+        await asyncio.sleep(0.01)
+        if FakeClient.activity_error is not None:
+            raise FakeClient.activity_error
+        return [
+            {"id": "c1", "type": 0, "author_id": 901, "created_at": 1_790_000_000_000,
+             "attachment": {"content": f"Comment on {event_uuid}"}},
+            {"id": "h1", "type": 3, "author_id": 901, "attachment": {"content": "history"}},
+        ]
+
     async def async_get_labels(self, calendar_id: int) -> dict:
         return dict(FakeClient.labels)
 
@@ -102,6 +121,8 @@ def fake_client():
     FakeClient.valid_session = "good"
     FakeClient.labels = {3: TimeTreeLabel(3, "Kids", "#3b9aa5")}
     FakeClient.login_calls = 0
+    FakeClient.activity_calls = 0
+    FakeClient.activity_error = None
     FakeClient.sync_calls = []
     with (
         patch("custom_components.timetree.coordinator.TimeTreeClient", FakeClient),

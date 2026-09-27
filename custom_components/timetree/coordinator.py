@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -21,6 +22,7 @@ from homeassistant.helpers.event import async_track_time_change
 from .api import (
     TimeTreeApiChanged,
     TimeTreeAuthError,
+    TimeTreeBusy,
     TimeTreeClient,
     TimeTreeConnectionError,
     TimeTreeSessionExpired,
@@ -34,6 +36,7 @@ from .const import (
     DOMAIN,
     EVENT_REMINDER,
 )
+from .comments import comments_from_activities, member_names
 from .insights import describe, due_reminders
 from .store import EventStore
 
@@ -50,6 +53,17 @@ _SESSION_KEY = f"{DOMAIN}_http_session"
 # After this many consecutive "unexpected structure" answers we assume TimeTree
 # changed its web API and raise a repair issue (one blip is not enough).
 API_CHANGE_THRESHOLD = 3
+COMMENT_CACHE = timedelta(minutes=1)
+COMMENT_FAILURE_CACHE = timedelta(seconds=30)
+COMMENT_CACHE_SIZE = 200
+MEMBER_CACHE = timedelta(hours=1)
+# Upstream budget for on-demand requests (comments) per account and minute,
+# and how long an on-demand re-login waits after a failed one.
+ON_DEMAND_BUDGET = 30
+ON_DEMAND_WINDOW = timedelta(minutes=1)
+RELOGIN_COOLDOWN = timedelta(minutes=5)
+MAX_HINTS = 100
+_HINT_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 ISSUE_API_CHANGED = "api_changed"
 ISSUE_TRACKER_URL = "https://github.com/tmsbyr87/TimeTree-HA/issues"
 
@@ -89,6 +103,34 @@ class TimeTreeAccount:
         # (calendar selection, interval) should reload the entry.
         self.options_snapshot = dict(entry.options)
         self._login_lock = asyncio.Lock()
+        self._budget_window: datetime | None = None
+        self._budget_used = 0
+        self._relogin_failed_at: datetime | None = None
+
+    def spend_budget(self) -> None:
+        """Count one on-demand upstream request; raise TimeTreeBusy when exhausted."""
+        now = dt_util.utcnow()
+        if self._budget_window is None or now - self._budget_window >= ON_DEMAND_WINDOW:
+            self._budget_window, self._budget_used = now, 0
+        if self._budget_used >= ON_DEMAND_BUDGET:
+            raise TimeTreeBusy("on-demand budget exhausted")
+        self._budget_used += 1
+
+    async def async_relogin_on_demand(self, failed_session_id: str | None) -> None:
+        """Re-login triggered by a dashboard request – with a cooldown after failures.
+
+        Scheduled syncs renew the session anyway; a dashboard must not be able
+        to hammer TimeTree's login endpoint.
+        """
+        now = dt_util.utcnow()
+        if self._relogin_failed_at and now - self._relogin_failed_at < RELOGIN_COOLDOWN:
+            raise TimeTreeBusy("re-login cooling down")
+        try:
+            await self.async_relogin(failed_session_id)
+        except Exception:
+            self._relogin_failed_at = now
+            raise
+        self._relogin_failed_at = None
 
     def async_start_clock(self) -> None:
         """Tick every minute: fire due reminders and refresh time-based sensors."""
@@ -151,6 +193,87 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
         # Reminders due before setup are not replayed after a restart.
         self._last_tick = dt_util.now()
         self._fired: dict[tuple[str, str, int], datetime] = {}
+        # Comments are fetched on demand (detail dialog) and cached briefly.
+        self._members: dict[str, str] = {}
+        self._members_at: datetime | None = None
+        self._comments: dict[str, tuple[datetime, list[dict] | None]] = {}
+        self._pending: dict[str, asyncio.Task] = {}
+        # Field names (never values) seen in on-demand answers, for diagnostics.
+        self.shape_hints: dict[str, set[str]] = {}
+
+    def _hint(self, key: str, items: list[dict]) -> None:
+        bucket = self.shape_hints.setdefault(key, set())
+        for item in items[:50]:
+            for k in item:
+                # plain field names only – never data that happens to be used as a key
+                if len(bucket) < MAX_HINTS and isinstance(k, str) and _HINT_RE.match(k):
+                    bucket.add(k)
+
+    async def _async_with_session(self, call):
+        """Run an on-demand API call, renewing the session once if needed."""
+        try:
+            return await call()
+        except TimeTreeSessionExpired:
+            await self._account.async_relogin_on_demand(self._client.session_id)
+            return await call()
+
+    def _cache_put(self, uid: str, at: datetime, comments: list[dict] | None) -> None:
+        self._comments.pop(uid, None)
+        self._comments[uid] = (at, comments)
+        while len(self._comments) > COMMENT_CACHE_SIZE:
+            self._comments.pop(next(iter(self._comments)))  # evict the oldest entry
+
+    async def async_get_comments(self, uid: str) -> list[dict]:
+        """Comments of one event of this calendar.
+
+        Protects the shared TimeTree account against request floods from the
+        dashboard: answers are cached, failures are cached briefly, parallel
+        requests for the same event share one upstream call, and the account
+        has an upstream budget (``TimeTreeBusy`` when exceeded).
+        """
+        now = dt_util.utcnow()
+        cached = self._comments.get(uid)
+        if cached:
+            at, comments = cached
+            if comments is not None and now - at < COMMENT_CACHE:
+                return comments
+            if comments is None and now - at < COMMENT_FAILURE_CACHE:
+                raise TimeTreeBusy("recent failure")
+        pending = self._pending.get(uid)
+        if pending is None:
+            pending = self.hass.async_create_task(self._async_fetch_comments(uid))
+            self._pending[uid] = pending
+            pending.add_done_callback(lambda _: self._pending.pop(uid, None))
+        return await asyncio.shield(pending)
+
+    async def _async_fetch_comments(self, uid: str) -> list[dict]:
+        now = dt_util.utcnow()
+        try:
+            if self._members_at is None or now - self._members_at > MEMBER_CACHE:
+                self._account.spend_budget()
+                members = await self._async_with_session(
+                    lambda: self._client.async_get_members(self._calendar_id)
+                )
+                self._hint("member_keys", members)
+                self._members = member_names(members)
+                self._members_at = now
+            self._account.spend_budget()
+            activities = await self._async_with_session(
+                lambda: self._client.async_get_activities(self._calendar_id, uid)
+            )
+        except TimeTreeBusy:
+            raise
+        except Exception:
+            self._cache_put(uid, now, None)
+            raise
+        self._hint("activity_keys", activities)
+        self._hint(
+            "activity_attachment_keys",
+            [a["attachment"] for a in activities if isinstance(a.get("attachment"), dict)],
+        )
+        comments = comments_from_activities(activities, self._members)
+        self._cache_put(uid, now, comments)
+        return comments
 
     def async_tick(self, now: datetime) -> None:
         """Fire reminders that became due since the last tick, then refresh listeners."""

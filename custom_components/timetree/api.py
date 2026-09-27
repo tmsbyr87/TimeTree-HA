@@ -12,11 +12,13 @@ import re
 import uuid
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import aiohttp
 
 from .const import (
     API_BASE_URL,
+    API_V2_BASE_URL,
     API_ERROR_INVALID_CREDENTIALS,
     API_ERROR_RATE_LIMITED,
     API_USER_AGENT,
@@ -50,6 +52,10 @@ class TimeTreeRateLimited(TimeTreeAuthError):
 
 class TimeTreeSessionExpired(TimeTreeError):
     """The stored session cookie is no longer accepted."""
+
+
+class TimeTreeBusy(TimeTreeError):
+    """An on-demand request was refused locally to protect the TimeTree account."""
 
 
 class TimeTreeApiChanged(TimeTreeError):
@@ -176,13 +182,13 @@ class TimeTreeClient:
         self._session_id = cookie.value
         return self._session_id
 
-    async def _get_json(self, path: str) -> dict[str, Any]:
+    async def _get_json(self, path: str, base: str = API_BASE_URL) -> dict[str, Any]:
         """GET a JSON endpoint using the stored session cookie."""
         if self._session_id is None:
             raise TimeTreeSessionExpired("No session available")
         try:
             async with self._session.get(
-                f"{API_BASE_URL}{path}",
+                f"{base}{path}",
                 headers=self._auth_headers(),
                 timeout=_TIMEOUT,
             ) as resp:
@@ -247,6 +253,27 @@ class TimeTreeClient:
                 color=_color_to_hex(raw.get("color")),
             )
         return result
+
+    async def async_get_activities(self, calendar_id: int, event_uuid: str) -> list[dict[str, Any]]:
+        """Raw activity feed (comments and change history) of one event."""
+        data = await self._get_json(
+            f"/calendar/{calendar_id}/event/{quote(event_uuid, safe='')}/activities?since=0"
+        )
+        if not isinstance(data, dict) or not isinstance(data.get("event_activities"), list):
+            raise TimeTreeApiChanged("activities: expected an object with an 'event_activities' list")
+        return [a for a in data["event_activities"] if isinstance(a, dict)]
+
+    async def async_get_members(self, calendar_id: int) -> list[dict[str, Any]]:
+        """Raw member list of a calendar (for comment author names); [] on errors."""
+        try:
+            data = await self._get_json(f"/calendars/{calendar_id}/users", base=API_V2_BASE_URL)
+        except TimeTreeSessionExpired:
+            raise
+        except TimeTreeConnectionError as err:
+            _LOGGER.debug("TimeTree members unavailable for %s: %s", calendar_id, err)
+            return []
+        users = data.get("calendar_users") if isinstance(data, dict) else None
+        return [u for u in users if isinstance(u, dict)] if isinstance(users, list) else []
 
     async def async_sync_events(self, calendar_id: int, since: int | None) -> SyncResult:
         """Fetch one page of the event sync feed.

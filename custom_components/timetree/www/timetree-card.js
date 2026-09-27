@@ -10,7 +10,7 @@
  * editor based on <ha-form>, so the card can be configured without YAML.
  */
 
-const CARD_VERSION = "1.2.1";
+const CARD_VERSION = "1.6.0";
 const CARD_TAG = "timetree-card";
 const EDITOR_TAG = "timetree-card-editor";
 const REFRESH_MS = 15 * 60 * 1000;
@@ -26,6 +26,10 @@ const STRINGS = {
     when: "Wann", where: "Wo", label: "Label", calendar: "Kalender", notes: "Notizen",
     allLabels: "Alle", noLabel: "Ohne Label", days: (n) => `${n} Tage`, day: "1 Tag",
     hours: (h) => `${h} Std.`, minutes: (m) => `${m} Min.`, running: "läuft gerade",
+    viewAgenda: "Agenda", viewToday: "Heute & Morgen", viewMonth: "Monat", free: "Keine Termine",
+    viewAgendaShort: "Agenda", viewTodayShort: "2 Tage", viewMonthShort: "Monat",
+    prev: "Vorheriger Monat", next: "Nächster Monat", goToday: "Heute",
+    comments: "Kommentare", commentsLoading: "Lade Kommentare …", commentsError: "Kommentare nicht verfügbar",
   },
   en: {
     today: "Today", tomorrow: "Tomorrow", yesterday: "Yesterday", allDay: "All day",
@@ -35,6 +39,10 @@ const STRINGS = {
     when: "When", where: "Where", label: "Label", calendar: "Calendar", notes: "Notes",
     allLabels: "All", noLabel: "No label", days: (n) => `${n} days`, day: "1 day",
     hours: (h) => `${h} h`, minutes: (m) => `${m} min`, running: "in progress",
+    viewAgenda: "Agenda", viewToday: "Today & tomorrow", viewMonth: "Month", free: "No events",
+    viewAgendaShort: "Agenda", viewTodayShort: "2 days", viewMonthShort: "Month",
+    prev: "Previous month", next: "Next month", goToday: "Today",
+    comments: "Comments", commentsLoading: "Loading comments …", commentsError: "Comments unavailable",
   },
 };
 
@@ -59,7 +67,11 @@ const DEFAULTS = {
   labels: [],            // config filter: only these label ids (strings/numbers); empty = all
   label_filter: false,   // interactive chip bar on the card
   tap_action: "dialog",  // dialog | more-info | none
+  view: "agenda",        // agenda | today | month
+  tabs: false,           // tab bar to switch views on the card (choice remembered per device)
+  show_comments: true,   // TimeTree comments in the detail dialog
 };
+const VIEWS = ["agenda", "today", "month"];
 
 const STYLE = `
   :host { display: block; }
@@ -139,6 +151,52 @@ const STYLE = `
   ha-card.layout-columns .days { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 20px; }
   @container card (max-width: 360px) { ha-card { --tt-time-w: 70px; --tt-pad: 12px; } .time { font-size: .85em; } }
 
+  /* ---- tabs ---- */
+  .tabs { display: flex; gap: 4px; margin: 2px var(--tt-pad) 6px; padding: 3px; border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-text-color) 6%, transparent); }
+  .tab { flex: 1; border: none; background: transparent; color: var(--tt-muted); font: inherit; font-size: .85em; font-weight: 600;
+    padding: 6px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @container card (max-width: 420px) { .tab { padding: 6px 4px; font-size: .78em; } .tab .long { display: none; } }
+  @container card (min-width: 421px) { .tab .short { display: none; } }
+  .tab.on { background: var(--ha-card-background, var(--card-background-color, #fff)); color: var(--tt-accent);
+    box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+
+  /* ---- today & tomorrow ---- */
+  .tt2 { display: grid; grid-template-columns: 1fr; gap: 8px 20px; }
+  @container card (min-width: 560px) { .tt2 { grid-template-columns: 1fr 1fr; } }
+  .event.past { opacity: .5; }
+  .free { color: var(--tt-muted); font-size: .9em; padding: 10px 0; }
+
+  /* ---- month ---- */
+  .mnav { display: flex; align-items: center; gap: 6px; padding: 8px 0 6px; }
+  .mnav .mt { flex: 1; font-weight: 700; font-size: 1em; text-transform: capitalize; }
+  .mnav button { border: none; background: color-mix(in srgb, var(--primary-text-color) 7%, transparent); color: var(--primary-text-color);
+    border-radius: 999px; height: 32px; min-width: 32px; padding: 0 10px; cursor: pointer; font: inherit; font-size: .85em; }
+  .mnav button.nav { font-size: 1.1em; padding: 0; }
+  .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--tt-divider); border-left: 1px solid var(--tt-divider); }
+  .wd { font-size: .72em; text-transform: uppercase; letter-spacing: .04em; color: var(--tt-muted); text-align: center; padding: 6px 0;
+    border-right: 1px solid var(--tt-divider); border-bottom: 1px solid var(--tt-divider); }
+  .cell { appearance: none; border: 0; border-radius: 0; margin: 0;
+    min-height: 46px; padding: 3px; border-right: 1px solid var(--tt-divider); border-bottom: 1px solid var(--tt-divider);
+    cursor: pointer; min-width: 0; display: flex; flex-direction: column; gap: 2px; background: transparent; font: inherit; color: inherit; text-align: left; }
+  .cell.out { opacity: .4; }
+  .cell:focus-visible { outline: 2px solid var(--tt-accent); outline-offset: -2px; }
+  .cell.sel { background: color-mix(in srgb, var(--tt-accent) 10%, transparent); }
+  .cell .n { font-size: .8em; font-weight: 600; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; }
+  .cell.today .n { background: var(--tt-accent); color: var(--text-primary-color, #fff); }
+  .cell .pill { font-size: .7em; line-height: 1.3; padding: 0 4px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: color-mix(in srgb, var(--c) 18%, transparent); border-left: 3px solid var(--c); }
+  .cell .dots { display: none; gap: 3px; flex-wrap: wrap; padding: 0 2px; }
+  .cell .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--c); display: block; }
+  .cell .more-n { font-size: .68em; color: var(--tt-muted); padding: 0 4px; }
+  @container card (max-width: 520px) {
+    .cell { min-height: 40px; align-items: center; }
+    .cell .pill, .cell .more-n { display: none; }
+    .cell .dots { display: flex; justify-content: center; }
+  }
+  @container card (min-width: 760px) { .cell { min-height: 78px; } }
+  .dayhead-sel { padding: 12px 0 2px; font-weight: 700; }
+
   /* ---- detail dialog ---- */
   .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9; display: flex; align-items: flex-end; justify-content: center;
     animation: fade 120ms ease; }
@@ -159,6 +217,11 @@ const STYLE = `
   .sheet .v { font-size: 1em; line-height: 1.4; overflow-wrap: anywhere; }
   .sheet .v .pre, .sheet .v.pre { white-space: pre-line; }
   .sheet .v a { color: var(--tt-accent); }
+  .sheet .cm { display: grid; gap: 10px; }
+  .sheet .cm .c { background: color-mix(in srgb, var(--primary-text-color) 5%, transparent); border-radius: 12px; padding: 8px 12px; }
+  .sheet .cm .who { font-size: .78em; color: var(--tt-muted); margin-bottom: 2px; }
+  .sheet .cm .who b { color: var(--primary-text-color); font-weight: 600; }
+  .sheet .cm .txt { white-space: pre-line; overflow-wrap: anywhere; }
   .sheet .live { display: inline-block; margin-left: 8px; font-size: .78em; padding: 1px 8px; border-radius: 999px;
     background: color-mix(in srgb, var(--tt-accent) 18%, transparent); color: var(--tt-accent); font-weight: 600; }
 `;
@@ -167,6 +230,7 @@ const STYLE = `
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDate = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const dayKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 function parseHaDate(obj) {
@@ -201,7 +265,7 @@ const safeCssColor = (v) => {
 
 function linkify(text) {
   // escape first, then turn URLs into links
-  return esc(text).replace(/(https?:\/\/[^\s<]+)/g, (m) => `<a href="${m}" target="_blank" rel="noopener">${m}</a>`);
+  return esc(text).replace(/(https?:\/\/[^\s<]+)/g, (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`);
 }
 
 const labelKey = (id) => String(id);
@@ -242,6 +306,11 @@ class TimeTreeCard extends HTMLElement {
     this._sig = "";
     this._hidden = new Set();   // label keys hidden via chips ("__none" = events without label)
     this._open = null;          // event shown in the dialog
+    this._view = null;          // active view (tabs), resolved in setConfig
+    this._month = null;         // first day of the month shown in the month view
+    this._selDay = null;        // selected day key in the month view
+    this._rangeKey = "";
+    this._comments = new Map(); // uid -> { status, items }
   }
 
   setConfig(config) {
@@ -255,6 +324,9 @@ class TimeTreeCard extends HTMLElement {
     this._config = c;
     this._storageKey = `timetree-card:${(c.entities || []).join("|")}:${c.title || ""}`;
     this._loadHidden();
+    this._view = VIEWS.includes(c.view) ? c.view : "agenda";
+    if (c.tabs) { try { const v = localStorage.getItem(`${this._storageKey}:view`); if (VIEWS.includes(v)) this._view = v; } catch (_) { /* ignore */ } }
+    if (!this._month) { const n = new Date(); this._month = new Date(n.getFullYear(), n.getMonth(), 1); }
     this._render();
     this._maybeFetch(true);
   }
@@ -271,7 +343,7 @@ class TimeTreeCard extends HTMLElement {
 
   connectedCallback() { this._timer = setInterval(() => this._maybeFetch(true), REFRESH_MS); }
   disconnectedCallback() { if (this._timer) clearInterval(this._timer); this._timer = null; }
-  getCardSize() { return this._config?.compact ? 3 : 5; }
+  getCardSize() { return this._view === "month" ? 8 : this._config?.compact ? 3 : 5; }
   getGridOptions() { return { columns: 12, min_columns: 6, rows: "auto" }; }
 
   _loadHidden() {
@@ -290,8 +362,10 @@ class TimeTreeCard extends HTMLElement {
     this._status = this._events.length ? "ready" : "loading";
     this._render();
 
-    const start = toLocalDate(new Date());
-    const end = new Date(start.getTime() + this._config.days * 86400000);
+    const { start, end } = this._range();
+    const rangeKey = `${start.getTime()}-${end.getTime()}`;
+    if (rangeKey !== this._rangeKey) { this._events = []; this._status = "loading"; this._render(); }
+    this._rangeKey = rangeKey;
     const q = `?start=${encodeURIComponent(isoLocal(start))}&end=${encodeURIComponent(isoLocal(end))}`;
 
     try {
@@ -314,6 +388,39 @@ class TimeTreeCard extends HTMLElement {
       this._status = "error";
     }
     this._render();
+  }
+
+  _range() {
+    const today = toLocalDate(new Date());
+    if (this._view === "today") return { start: today, end: addDays(today, 2) };
+    if (this._view === "month") { const g = this._gridStart(); return { start: g, end: addDays(g, 42) }; }
+    return { start: today, end: addDays(today, this._config.days) };
+  }
+
+  _firstWeekday() {
+    // 1 = Monday … 7 = Sunday
+    try { const info = new Intl.Locale(this._locale() || "en").weekInfo || new Intl.Locale(this._locale() || "en").getWeekInfo?.(); if (info && info.firstDay) return info.firstDay; } catch (_) { /* ignore */ }
+    return lang(this._hass) === "de" ? 1 : 7;
+  }
+
+  _gridStart() {
+    const first = this._month; const fw = this._firstWeekday() % 7; // JS: 0 = Sunday
+    const back = (first.getDay() - fw + 7) % 7;
+    return addDays(first, -back);
+  }
+
+  _setView(v) {
+    if (!VIEWS.includes(v) || v === this._view) return;
+    this._view = v;
+    try { localStorage.setItem(`${this._storageKey}:view`, v); } catch (_) { /* ignore */ }
+    this._maybeFetch(true);
+  }
+
+  _shiftMonth(delta) {
+    const m = this._month;
+    this._month = delta === 0 ? new Date(new Date().getFullYear(), new Date().getMonth(), 1) : new Date(m.getFullYear(), m.getMonth() + delta, 1);
+    this._selDay = delta === 0 ? dayKey(new Date()) : null;
+    this._maybeFetch(true);
   }
 
   _normalize(ev, entity, idx) {
@@ -365,17 +472,39 @@ class TimeTreeCard extends HTMLElement {
 
   /* ---------- rendering ---------- */
 
-  _render() {
-    if (!this._config) return;
-    const c = this._config; const now = new Date(); const today = toLocalDate(now); const t = (k, ...a) => this._t(k, ...a);
+  _rowHtml(e, now) {
+    const c = this._config; const t = (k, ...a) => this._t(k, ...a);
+    const tappable = c.tap_action !== "none";
+    const running = e.start <= now && e.end > now; const past = e.end <= now;
+    const timeHtml = e.allDay ? `<div class="time">${t("allDay")}</div>`
+      : `<div class="time">${running ? `<strong>${t("now")}</strong>` : this._fmtTime(e.start)}<span class="end">${t("until")} ${this._fmtTime(e.end)}</span></div>`;
+    const loc = c.show_location && e.location ? `<div class="meta"><ha-icon icon="mdi:map-marker-outline"></ha-icon><span>${esc(e.location)}</span></div>` : "";
+    const tag = c.show_label && e.label ? `<div class="tag" style="--c:${esc(e.label.color)}"><span class="sw"></span>${esc(e.label.name)}</div>` : "";
+    const desc = c.show_description && e.description ? `<div class="desc">${esc(e.description)}</div>` : "";
+    const i = this._shown.push(e) - 1;
+    return `<div class="event${running ? " running" : ""}${past ? " past" : ""}${tappable ? " tappable" : ""}" data-i="${i}" ${tappable ? 'role="button" tabindex="0"' : ""}>
+        ${timeHtml}<div class="dot" style="--dot:${esc(e.color)}"></div>
+        <div class="main"><div class="summary">${esc(e.summary)}</div>${loc}${tag}${desc}</div></div>`;
+  }
 
-    let events = this._events;
-    if (!c.show_all_day) events = events.filter((e) => !e.allDay);
+  _onDay(events, day) {
+    // occurrences overlapping the local day, all-day first
+    const start = day; const end = addDays(day, 1);
+    return events.filter((e) => e.start < end && e.end > start)
+      .sort((a, b) => (a.allDay === b.allDay ? a.start - b.start : a.allDay ? -1 : 1));
+  }
+
+  _dayHeadHtml(date, today) {
+    const rel = this._relDay(date, today);
+    return `<div class="day-head">${rel ? `<span class="rel">${rel}</span>` : ""}<span>${this._fmtDay(date)}</span></div>`;
+  }
+
+  _agendaHtml(events, now, today) {
+    const c = this._config; const t = (k, ...a) => this._t(k, ...a);
     events = events.filter((e) => e.end > now);
-    events = this._visible(events);
     const total = events.length;
     events = events.slice(0, c.max_events);
-
+    if (!events.length) return this._emptyHtml();
     const groups = new Map();
     for (const e of events) {
       const d = e.allDay ? e.start : toLocalDate(e.start); const k = dayKey(d);
@@ -383,6 +512,69 @@ class TimeTreeCard extends HTMLElement {
       groups.get(k).items.push(e);
     }
     for (const g of groups.values()) g.items.sort((a, b) => (a.allDay === b.allDay ? a.start - b.start : a.allDay ? -1 : 1));
+    const dayHtml = [...groups.values()].map((g) =>
+      `<section class="day${dayKey(g.date) === dayKey(today) ? " today" : ""}">${this._dayHeadHtml(g.date, today)}${g.items.map((e) => this._rowHtml(e, now)).join("")}</section>`);
+    this._count = events.length;
+    return `<div class="days">${dayHtml.join("")}</div>${total > events.length ? `<div class="more">${t("more", total - events.length)}</div>` : ""}`;
+  }
+
+  _todayHtml(events, now, today) {
+    const t = (k, ...a) => this._t(k, ...a);
+    let count = 0;
+    const cols = [today, addDays(today, 1)].map((day, n) => {
+      const items = this._onDay(events, day); count += items.length;
+      const rows = items.length ? items.map((e) => this._rowHtml(e, now)).join("") : `<div class="free">${t("free")}</div>`;
+      return `<section class="day${n === 0 ? " today" : ""}">${this._dayHeadHtml(day, today)}${rows}</section>`;
+    });
+    this._count = count;
+    return `<div class="tt2">${cols.join("")}</div>`;
+  }
+
+  _monthHtml(events, now, today) {
+    const t = (k, ...a) => this._t(k, ...a);
+    const start = this._gridStart(); const month = this._month.getMonth();
+    const locale = this._locale();
+    const wdFmt = new Intl.DateTimeFormat(locale, { weekday: "short" });
+    const title = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(this._month);
+    const inMonthToday = today.getMonth() === month && today.getFullYear() === this._month.getFullYear();
+    if (!this._selDay) this._selDay = dayKey(inMonthToday ? today : this._month);
+    const head = [...Array(7)].map((_, i) => `<div class="wd">${esc(wdFmt.format(addDays(start, i)))}</div>`).join("");
+    const daysInMonth = new Date(this._month.getFullYear(), month + 1, 0).getDate();
+    const weeks = Math.ceil((Math.round((this._month - start) / 86400000) + daysInMonth) / 7);
+    let cells = ""; let selDate = null;
+    for (let i = 0; i < weeks * 7; i++) {
+      const d = addDays(start, i); const k = dayKey(d);
+      const items = this._onDay(events, d);
+      if (k === this._selDay) selDate = d;
+      const pills = items.slice(0, 3).map((e) => `<div class="pill" style="--c:${esc(e.color)}">${e.allDay ? "" : `${this._fmtTime(e.start)} `}${esc(e.summary)}</div>`).join("");
+      const dots = items.slice(0, 4).map((e) => `<i style="--c:${esc(e.color)}"></i>`).join("");
+      cells += `<button class="cell${d.getMonth() !== month ? " out" : ""}${k === dayKey(today) ? " today" : ""}${k === this._selDay ? " sel" : ""}" data-day="${k}" aria-label="${esc(this._fmtLong(d))}">
+        <span class="n">${d.getDate()}</span>${pills}${items.length > 3 ? `<span class="more-n">+${items.length - 3}</span>` : ""}<span class="dots">${dots}</span></button>`;
+    }
+    const monthEvents = events.filter((e) => e.start < addDays(new Date(this._month.getFullYear(), month + 1, 1), 0) && e.end > this._month);
+    this._count = monthEvents.length;
+    let detail = "";
+    if (selDate) {
+      const items = this._onDay(events, selDate);
+      detail = `<section class="day">${this._dayHeadHtml(selDate, today)}${items.length ? items.map((e) => this._rowHtml(e, now)).join("") : `<div class="free">${t("free")}</div>`}</section>`;
+    }
+    return `<div class="mnav"><button class="nav" data-m="-1" aria-label="${t("prev")}">‹</button><div class="mt">${esc(title)}</div>
+        ${inMonthToday ? "" : `<button data-m="0">${t("goToday")}</button>`}<button class="nav" data-m="1" aria-label="${t("next")}">›</button></div>
+      <div class="grid">${head}${cells}</div>${detail}`;
+  }
+
+  _emptyHtml() {
+    const c = this._config; const t = (k, ...a) => this._t(k, ...a);
+    return `<div class="state"><ha-icon icon="mdi:calendar-check"></ha-icon>${esc(c.empty_text) || t("noEvents")}</div>`;
+  }
+
+  _render() {
+    if (!this._config) return;
+    const c = this._config; const now = new Date(); const today = toLocalDate(now); const t = (k, ...a) => this._t(k, ...a);
+
+    let events = this._events;
+    if (!c.show_all_day) events = events.filter((e) => !e.allDay);
+    events = this._visible(events);
 
     const title = c.title || t("title");
     const accentColor = safeCssColor(c.accent_color);
@@ -408,40 +600,24 @@ class TimeTreeCard extends HTMLElement {
       }
     }
 
+    const tabs = c.tabs
+      ? `<div class="tabs" role="tablist">${[["agenda", "viewAgenda"], ["today", "viewToday"], ["month", "viewMonth"]].map(([v, k]) =>
+        `<button class="tab${this._view === v ? " on" : ""}" role="tab" aria-selected="${this._view === v}" data-view="${v}"><span class="long">${t(k)}</span><span class="short">${t(k + "Short")}</span></button>`).join("")}</div>` : "";
+
+    this._shown = []; this._count = 0;
     let body = "";
     if (this._status === "missing") body = `<div class="state error"><ha-icon icon="mdi:calendar-alert"></ha-icon>${t("missing")}</div>`;
     else if (this._status === "error") body = `<div class="state error"><ha-icon icon="mdi:cloud-off-outline"></ha-icon>${t("error")}</div>`;
-    else if (this._status === "loading") body = `<div class="state"><ha-circular-progress indeterminate size="small"></ha-circular-progress>${t("loading")}</div>`;
-    else if (!events.length) body = `<div class="state"><ha-icon icon="mdi:calendar-check"></ha-icon>${esc(c.empty_text) || t("noEvents")}</div>`;
-    else {
-      const tappable = c.tap_action !== "none";
-      const dayHtml = [];
-      let idx = 0;
-      for (const [, g] of groups) {
-        const isToday = dayKey(g.date) === dayKey(today); const rel = this._relDay(g.date, today);
-        const rows = g.items.map((e) => {
-          const running = e.start <= now && e.end > now;
-          const timeHtml = e.allDay ? `<div class="time">${t("allDay")}</div>`
-            : `<div class="time">${running ? `<strong>${t("now")}</strong>` : this._fmtTime(e.start)}<span class="end">${t("until")} ${this._fmtTime(e.end)}</span></div>`;
-          const loc = c.show_location && e.location ? `<div class="meta"><ha-icon icon="mdi:map-marker-outline"></ha-icon><span>${esc(e.location)}</span></div>` : "";
-          const tag = c.show_label && e.label ? `<div class="tag" style="--c:${esc(e.label.color)}"><span class="sw"></span>${esc(e.label.name)}</div>` : "";
-          const desc = c.show_description && e.description ? `<div class="desc">${esc(e.description)}</div>` : "";
-          const i = idx++; e._i = i;
-          return `<div class="event${running ? " running" : ""}${tappable ? " tappable" : ""}" data-i="${i}" ${tappable ? 'role="button" tabindex="0"' : ""}>
-              ${timeHtml}<div class="dot" style="--dot:${esc(e.color)}"></div>
-              <div class="main"><div class="summary">${esc(e.summary)}</div>${loc}${tag}${desc}</div></div>`;
-        }).join("");
-        dayHtml.push(`<section class="day${isToday ? " today" : ""}"><div class="day-head">${rel ? `<span class="rel">${rel}</span>` : ""}<span>${this._fmtDay(g.date)}</span></div>${rows}</section>`);
-      }
-      body = `<div class="days">${dayHtml.join("")}</div>${total > events.length ? `<div class="more">${t("more", total - events.length)}</div>` : ""}`;
-    }
-    this._shown = events;
+    else if (this._status === "loading" && this._view !== "month") body = `<div class="state"><ha-circular-progress indeterminate size="small"></ha-circular-progress>${t("loading")}</div>`;
+    else if (this._view === "today") body = this._todayHtml(events, now, today);
+    else if (this._view === "month") body = this._monthHtml(events, now, today);
+    else body = this._agendaHtml(events, now, today);
 
     const header = c.show_header
-      ? `<div class="header">${iconHtml}<div style="min-width:0"><div class="title">${esc(title)}</div></div><div class="spacer"></div>${events.length ? `<div class="count">${events.length}</div>` : ""}</div>` : "";
+      ? `<div class="header">${iconHtml}<div style="min-width:0"><div class="title">${esc(title)}</div></div><div class="spacer"></div>${this._count ? `<div class="count">${this._count}</div>` : ""}</div>` : "";
 
     this.shadowRoot.innerHTML = `<style>${STYLE}</style>
-      <ha-card class="${layoutClass}${c.compact ? " compact" : ""}" style="${accent}">${header}${chips}<div class="body">${body}</div>${this._dialogHtml(now)}</ha-card>`;
+      <ha-card class="${layoutClass}${c.compact ? " compact" : ""} view-${this._view}" style="${accent}">${header}${tabs}${chips}<div class="body">${body}</div>${this._dialogHtml(now)}</ha-card>`;
 
     // wire up
     this.shadowRoot.querySelectorAll(".event.tappable").forEach((el) => {
@@ -450,6 +626,9 @@ class TimeTreeCard extends HTMLElement {
       el.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
     });
     this.shadowRoot.querySelectorAll(".chip").forEach((el) => el.addEventListener("click", () => this._toggleChip(el.dataset.key)));
+    this.shadowRoot.querySelectorAll(".tab").forEach((el) => el.addEventListener("click", () => this._setView(el.dataset.view)));
+    this.shadowRoot.querySelectorAll(".mnav button").forEach((el) => el.addEventListener("click", () => this._shiftMonth(Number(el.dataset.m))));
+    this.shadowRoot.querySelectorAll(".cell").forEach((el) => el.addEventListener("click", () => { this._selDay = el.dataset.day; this._render(); }));
     const bd = this.shadowRoot.querySelector(".backdrop");
     if (bd) {
       bd.addEventListener("click", (ev) => { if (ev.target === bd) this._closeDialog(); });
@@ -471,7 +650,42 @@ class TimeTreeCard extends HTMLElement {
       this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: e.entity } }));
       return;
     }
-    if (this._config.tap_action === "dialog") { this._open = e; this._render(); }
+    if (this._config.tap_action === "dialog") { this._open = e; this._render(); this._loadComments(e); }
+  }
+
+  async _loadComments(e) {
+    if (!this._config.show_comments || !e.uid || !isTimeTree(this._hass, e.entity)) return;
+    const key = `${e.entity}|${e.uid}`;
+    const cached = this._comments.get(key);
+    if (cached && (cached.status === "loading" || Date.now() - cached.at < 60000)) return;
+    this._comments.set(key, { status: "loading", items: cached ? cached.items : [], at: Date.now() });
+    this._render();
+    let next;
+    try {
+      const items = await this._hass.callApi("GET", `timetree/comments/${e.entity}?uid=${encodeURIComponent(e.uid)}`);
+      next = { status: "ready", items: Array.isArray(items) ? items : [], at: Date.now() };
+    } catch (_) {
+      next = { status: "error", items: [], at: Date.now() };
+    }
+    this._comments.set(key, next);
+    if (this._open && this._open.uid === e.uid) this._render();
+  }
+
+  _commentsHtml(e) {
+    if (!this._config.show_comments || !e.uid || !isTimeTree(this._hass, e.entity)) return null;
+    const t = (k, ...a) => this._t(k, ...a);
+    const state = this._comments.get(`${e.entity}|${e.uid}`);
+    if (!state) return null;
+    if (state.status === "loading" && !state.items.length) return ["mdi:comment-outline", t("comments"), `<span class="k">${t("commentsLoading")}</span>`];
+    if (state.status === "error") return null; // stay quiet – the event itself is fine
+    if (!state.items.length) return null;
+    const fmt = new Intl.DateTimeFormat(this._locale(), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    const list = state.items.map((c) => {
+      const when = c.created_at ? fmt.format(new Date(c.created_at)) : "";
+      const who = [c.author ? `<b>${esc(c.author)}</b>` : "", esc(when)].filter(Boolean).join(" · ");
+      return `<div class="c">${who ? `<div class="who">${who}</div>` : ""}<div class="txt">${linkify(c.content)}</div></div>`;
+    }).join("");
+    return ["mdi:comment-text-multiple-outline", `${t("comments")} (${state.items.length})`, `<div class="cm">${list}</div>`];
   }
 
   _closeDialog() { this._open = null; this._render(); }
@@ -491,9 +705,10 @@ class TimeTreeCard extends HTMLElement {
     const running = e.start <= now && e.end > now;
     const rows = [
       ["mdi:clock-outline", t("when"), `${when}${running ? `<span class="live">${t("running")}</span>` : ""}`],
-      e.location ? ["mdi:map-marker-outline", t("where"), `<a href="https://maps.google.com/?q=${encodeURIComponent(e.location)}" target="_blank" rel="noopener">${esc(e.location)}</a>`] : null,
+      e.location ? ["mdi:map-marker-outline", t("where"), `<a href="https://maps.google.com/?q=${encodeURIComponent(e.location)}" target="_blank" rel="noopener noreferrer">${esc(e.location)}</a>`] : null,
       e.label ? ["mdi:tag-outline", t("label"), `<span class="tag" style="--c:${esc(e.label.color)}"><span class="sw"></span>${esc(e.label.name)}</span>`] : null,
       e.description ? ["mdi:text", t("notes"), `<div class="pre">${linkify(e.description)}</div>`] : null,
+      this._commentsHtml(e),
       ["mdi:calendar", t("calendar"), esc(e.entityName)],
     ].filter(Boolean);
     return `<div class="backdrop" role="dialog" aria-modal="true">
@@ -523,6 +738,12 @@ class TimeTreeCardEditor extends HTMLElement {
     const schema = [
       { name: "entities", selector: { entity: { multiple: true, filter: { domain: "calendar" } } } },
       { type: "grid", name: "", schema: [
+        { name: "view", selector: { select: { mode: "dropdown", options: [
+          { value: "agenda", label: L("Agenda", "Agenda") }, { value: "today", label: L("Heute & Morgen", "Today & tomorrow") },
+          { value: "month", label: L("Monat", "Month") } ] } } },
+        { name: "tabs", selector: { boolean: {} } },
+      ] },
+      { type: "grid", name: "", schema: [
         { name: "title", selector: { text: {} } },
         { name: "icon", selector: { icon: {} } },
       ] },
@@ -549,6 +770,7 @@ class TimeTreeCardEditor extends HTMLElement {
       { name: "show_description", selector: { boolean: {} } },
       { name: "relative_days", selector: { boolean: {} } },
       { name: "compact", selector: { boolean: {} } },
+      { name: "show_comments", selector: { boolean: {} } },
     ] });
     schema.push({ name: "empty_text", selector: { text: {} } });
     return schema;
@@ -562,12 +784,14 @@ class TimeTreeCardEditor extends HTMLElement {
       label_filter: "Label-Filter auf der Karte", show_label: "Label am Termin", show_header: "Kopfzeile", show_icon: "Icon anzeigen",
       show_all_day: "Ganztägige anzeigen", show_location: "Ort anzeigen", show_description: "Beschreibung anzeigen",
       relative_days: "Heute / Morgen", compact: "Kompakt", empty_text: "Text wenn keine Termine",
+      view: "Ansicht", tabs: "Reiter zum Umschalten", show_comments: "Kommentare im Detail",
     } : {
       entities: "Calendars", title: "Title", icon: "Icon", days: "Range", max_events: "Max. events", layout: "Layout",
       tap_action: "On tap", accent_color: "Accent colour (e.g. #2ecc84)", labels: "Only show these labels",
       label_filter: "Label filter on the card", show_label: "Label on event", show_header: "Header", show_icon: "Show icon",
       show_all_day: "Show all-day events", show_location: "Show location", show_description: "Show description",
       relative_days: "Today / Tomorrow", compact: "Compact", empty_text: "Text when empty",
+      view: "View", tabs: "Tabs to switch views", show_comments: "Comments in details",
     };
     return map[schema.name] || schema.name;
   }
@@ -606,7 +830,7 @@ if (!customElements.get(EDITOR_TAG)) customElements.define(EDITOR_TAG, TimeTreeC
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === CARD_TAG)) {
   window.customCards.push({ type: CARD_TAG, name: "TimeTree Agenda",
-    description: "Responsive, theme-aware agenda for any calendar entity with label filters and an event detail dialog.",
+    description: "Agenda, today & tomorrow or month view for any calendar – label filters, tabs and event details with TimeTree comments.",
     preview: true, documentationURL: "https://github.com/tmsbyr87/TimeTree-HA#dashboard-card" });
 }
 console.info(`%c TIMETREE-CARD %c ${CARD_VERSION} `, "color:#fff;background:#2ecc84;font-weight:700", "color:#2ecc84;background:#fff;font-weight:700"); // eslint-disable-line no-console

@@ -107,7 +107,8 @@ The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetr
 - **Works with any calendar** — not just TimeTree. Add several `calendar.*` entities; each gets its own colour.
 - **Readable at a glance** — *Today* / *Tomorrow* labels, the running event highlighted with *Now*, all-day events first, locations and (optionally) descriptions.
 - **Your TimeTree labels** — colours and names come straight from TimeTree. Show them on each event, filter the card to selected labels in the editor, or switch on the **chip bar** so anyone can toggle labels right on the card (remembered per device).
-- **Event details** — tapping an event opens a clean detail sheet: date, time and duration, location (opens in Maps), label, notes with clickable links, calendar. No entity history graphs.
+- **Three views** — *Agenda* (the next days), *Today & tomorrow* (two columns on wide cards, past events dimmed) and *Month* (grid with navigation; tap a day to see its events). Switch on **tabs** and everyone can change the view right on the card; the choice is remembered per device.
+- **Event details** — tapping an event opens a clean detail sheet: date, time and duration, location (opens in Maps), label, notes with clickable links, calendar and the event's **TimeTree comments**. No entity history graphs.
 - **Localised** — German and English, date/time formats follow your Home Assistant locale.
 
 <p align="center">
@@ -126,6 +127,9 @@ The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetr
 | `days` | `7` | How many days ahead to show (1–60) |
 | `max_events` | `30` | Cap on listed events; the rest is summarised as “+ n more” |
 | `layout` | `auto` | `auto` (list ↔ columns by width), `list`, or `columns` |
+| `view` | `agenda` | `agenda`, `today` (today & tomorrow) or `month` |
+| `tabs` | `false` | Tab bar to switch views on the card |
+| `show_comments` | `true` | Load TimeTree comments in the detail sheet |
 | `tap_action` | `dialog` | `dialog` (detail sheet), `more-info` (entity dialog), `none` |
 | `accent_color` | theme primary | Any CSS colour, e.g. `#2ecc84` |
 | `labels` | all | Only show events with these TimeTree label ids (multi-select in the editor) |
@@ -151,6 +155,8 @@ layout: auto
 label_filter: true
 tap_action: dialog
 ```
+
+> **Privacy:** like Home Assistant's own calendar API, event details and comments are visible to every user who can log in to your Home Assistant – not only administrators. Comments are fetched from TimeTree only when a detail sheet is opened, cached briefly, and rate-limited so a dashboard can never flood your TimeTree account.
 
 Labels are read from the calendar entity's `labels` attribute (TimeTree calendars only); events are fetched from `/api/timetree/events/<entity>` so each one carries its label. Other calendar integrations fall back to Home Assistant's standard calendar API and simply have no labels.
 

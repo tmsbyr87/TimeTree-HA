@@ -12,7 +12,8 @@ def _calendar():
         calendar_id=42,
         raw_events=[
             {"uuid": "u1", "title": "Dentist Anna", "note": "bring card", "location": "Main Street 12",
-             "all_day": False, "recurrences": ["RRULE:FREQ=WEEKLY"], "label_id": 3, "alerts": [15]},
+             "all_day": False, "recurrences": ["RRULE:FREQ=WEEKLY"], "label_id": 3, "alerts": [15],
+             "files": [{"url": "https://secret.example/photo.jpg", "id": 5}], "attachment": {"checklist": ["milk"]}},
             {"uuid": "u2", "title": "Holiday", "all_day": True, "recurrences": None, "label_id": None},
         ],
         label_count=5,
@@ -21,6 +22,7 @@ def _calendar():
         last_update_success=True,
         last_error=None,
         api_change_streak=0,
+        shape_hints={"activity_keys": {"type", "attachment"}},
     )
 
 
@@ -55,7 +57,8 @@ def test_v1_calendar_name_is_redacted_too():
 def test_no_personal_content_leaks():
     dumped = json.dumps(_payload(), ensure_ascii=False)
     for secret in ("hunter2-secret", "sess-abcdef", "someone@example.org", "Smith Family", "Work",
-                   "Dentist Anna", "bring card", "Main Street 12", "Holiday"):
+                   "Dentist Anna", "bring card", "Main Street 12", "Holiday",
+                   "secret.example", "milk"):
         assert secret not in dumped, secret
 
 
@@ -71,3 +74,10 @@ def test_counters_and_field_names_are_present():
     assert events["with_alerts"] == 1
     assert events["window_occurrences"] == 17
     assert "title" in events["field_names"] and "label_id" in events["field_names"]
+
+
+def test_shapes_report_key_names_only():
+    shapes = _payload()["calendars"][0]["shapes"]
+    assert shapes["event_files_keys"] == ["id", "url"]
+    assert shapes["event_attachment_keys"] == ["checklist"]
+    assert shapes["activity_keys"] == ["attachment", "type"]

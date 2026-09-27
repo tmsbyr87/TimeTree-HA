@@ -12,6 +12,7 @@ and adds ``label_id`` plus ``label`` ``{id, name, color}`` per occurrence.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 from http import HTTPStatus
 from typing import Any
@@ -23,6 +24,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
+_LOGGER = logging.getLogger(__name__)
+
+from .api import TimeTreeBusy, TimeTreeError
+from .comments import UID_RE
 from .const import DOMAIN
 from .coordinator import TimeTreeAccount, TimeTreeCoordinator
 
@@ -135,3 +140,36 @@ class TimeTreeLabelsView(HomeAssistantView):
                 for lbl in sorted(labels.values(), key=lambda l: l.name.lower())
             ]
         )
+
+
+class TimeTreeCommentsView(HomeAssistantView):
+    """Comments of one event, fetched from TimeTree on demand.
+
+    Only uids of events that are part of the entity's calendar are accepted,
+    so the proxy cannot be used to read anything else from the account.
+    """
+
+    url = "/api/timetree/comments/{entity_id}"
+    name = "api:timetree:comments"
+    requires_auth = True
+
+    async def get(self, request: web.Request, entity_id: str) -> web.Response:
+        """Return ``[{id, author, content, created_at}]`` for ``?uid=``."""
+        hass: HomeAssistant = request.app["hass"]
+        coordinator = _coordinator_for(hass, entity_id)
+        if coordinator is None:
+            return self.json_message("Not a TimeTree calendar", HTTPStatus.NOT_FOUND)
+        uid = request.query.get("uid", "")
+        if not UID_RE.match(uid) or not coordinator.data.has(uid):
+            return self.json_message("Unknown event", HTTPStatus.NOT_FOUND)
+        try:
+            comments = await coordinator.async_get_comments(uid)
+        except TimeTreeBusy:
+            return self.json_message("Too many requests, try again shortly", HTTPStatus.TOO_MANY_REQUESTS)
+        except TimeTreeError as err:
+            _LOGGER.debug("TimeTree comments unavailable: %s", err)
+            return self.json_message("TimeTree unavailable", HTTPStatus.BAD_GATEWAY)
+        except Exception:  # noqa: BLE001 – incl. ConfigEntryAuthFailed/UpdateFailed from re-login
+            _LOGGER.debug("TimeTree comments failed", exc_info=True)
+            return self.json_message("TimeTree unavailable", HTTPStatus.BAD_GATEWAY)
+        return self.json(comments)
