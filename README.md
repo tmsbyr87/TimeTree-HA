@@ -12,6 +12,10 @@
 </p>
 
 <p align="center">
+  <a href="https://buymeacoffee.com/tmsbyr"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee"></a>
+</p>
+
+<p align="center">
   Bring your shared <a href="https://timetreeapp.com">TimeTree</a> calendar into <a href="https://www.home-assistant.io">Home Assistant</a> — sign in once, and every family event shows up as a native <code>calendar</code> entity you can put on dashboards and use in automations.
 </p>
 
@@ -128,6 +132,10 @@ Issues and pull requests are welcome. The API client, event conversion and sync 
 python -m venv .venv && .venv/bin/pip install ical pytest pytest-asyncio "aiohttp<3.13" aioresponses
 .venv/bin/python -m pytest tests -p asyncio --asyncio-mode=auto
 ```
+
+## Support
+
+If this integration saves you the ICS-export dance, you can [buy me a coffee](https://buymeacoffee.com/tmsbyr) ☕ — it keeps the TimeTree endpoints watched and the project maintained.
 
 ## Acknowledgements
 
