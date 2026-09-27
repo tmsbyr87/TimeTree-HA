@@ -10,7 +10,7 @@
  * editor based on <ha-form>, so the card can be configured without YAML.
  */
 
-const CARD_VERSION = "1.6.3";
+const CARD_VERSION = "1.6.4";
 const CARD_TAG = "timetree-card";
 const EDITOR_TAG = "timetree-card-editor";
 const REFRESH_MS = 15 * 60 * 1000;
@@ -200,7 +200,7 @@ const STYLE = `
   .dayhead-sel { padding: 12px 0 2px; font-weight: 700; }
 
   /* ---- detail dialog ---- */
-  .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9; display: flex; align-items: flex-end; justify-content: center; }
+  .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; }
   .backdrop.anim { animation: fade 120ms ease; }
   .backdrop.anim .sheet { animation: up 160ms ease; }
   @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
@@ -228,6 +228,22 @@ const STYLE = `
   .sheet .cm .txt { white-space: pre-line; overflow-wrap: anywhere; }
   .sheet .live { display: inline-block; margin-left: 8px; font-size: .78em; padding: 1px 8px; border-radius: 999px;
     background: color-mix(in srgb, var(--tt-accent) 18%, transparent); color: var(--tt-accent); font-weight: 600; }
+`;
+
+// The detail sheet is rendered in a "portal" attached to <body>, outside the
+// card: the card is a CSS size container, and size containment turns it into
+// the containing block of position:fixed children – a sheet inside it would
+// be clipped to the card. The portal defines the variables the card normally
+// provides and inherits theme colours from the document.
+const PORTAL_STYLE = `
+  :host { all: initial; position: fixed; inset: 0; z-index: 1000; pointer-events: none;
+    font-family: var(--ha-font-family-body, var(--paper-font-body1_-_font-family, Roboto, system-ui, sans-serif));
+    font-size: var(--ha-card-font-size, 15px); color: var(--primary-text-color);
+    -webkit-font-smoothing: antialiased;
+    --tt-accent: var(--timetree-accent, var(--primary-color, #2ecc84));
+    --tt-muted: var(--secondary-text-color);
+    --tt-divider: var(--divider-color, rgba(127,127,127,.25)); }
+  .dlg { pointer-events: auto; }
 `;
 
 /* ---------- helpers ---------- */
@@ -358,6 +374,10 @@ class TimeTreeCard extends HTMLElement {
     this._clock = setInterval(() => this._render(), 60 * 1000);
   }
   disconnectedCallback() {
+    // leaving the dashboard view: never leave a sheet behind on <body>
+    this._open = null;
+    this._dlgHtml = null;
+    this._removePortal();
     if (this._timer) clearInterval(this._timer);
     if (this._clock) clearInterval(this._clock);
     this._timer = this._clock = null;
@@ -640,10 +660,9 @@ class TimeTreeCard extends HTMLElement {
     // Build the skeleton once and only replace the parts whose markup changed,
     // so an open dialog is never torn down by an unrelated re-render.
     if (!this._card) {
-      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card><div class="main"></div><div class="dlg"></div></ha-card>`;
+      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card><div class="main"></div></ha-card>`;
       this._card = this.shadowRoot.querySelector("ha-card");
       this._mainEl = this._card.querySelector(".main");
-      this._dlgEl = this._card.querySelector(".dlg");
       this._mainHtml = this._dlgHtml = null;
     }
     const cls = `${layoutClass}${c.compact ? " compact" : ""} view-${this._view}`;
@@ -664,7 +683,7 @@ class TimeTreeCard extends HTMLElement {
     if (html === this._dlgHtml) return;
     const opening = !this._dlgHtml && html;
     this._dlgHtml = html;
-    const current = this._dlgEl.querySelector(".backdrop");
+    const current = this._dlgEl ? this._dlgEl.querySelector(".backdrop") : null;
     if (current && html) {
       // Same sheet, new content (e.g. comments arrived): swap only the inner
       // part so the frame, its animation and the scroll position stay put.
@@ -677,13 +696,10 @@ class TimeTreeCard extends HTMLElement {
       this._wireDialog(current);
       return;
     }
+    if (!html) { this._removePortal(); return; }
+    this._ensurePortal();
     this._dlgEl.innerHTML = html;
     const bd = this._dlgEl.querySelector(".backdrop");
-    if (!bd) {
-      if (this._escHandler) window.removeEventListener("keydown", this._escHandler);
-      this._escHandler = null;
-      return;
-    }
     if (opening) bd.classList.add("anim");
     bd.addEventListener("click", (ev) => { if (ev.target === bd) this._closeDialog(); });
     this._wireDialog(bd);
@@ -691,6 +707,28 @@ class TimeTreeCard extends HTMLElement {
       this._escHandler = (ev) => { if (ev.key === "Escape") this._closeDialog(); };
       window.addEventListener("keydown", this._escHandler);
     }
+  }
+
+  _ensurePortal() {
+    if (!this._portal) {
+      const host = document.createElement("div");
+      host.className = "timetree-card-dialog";
+      const root = host.attachShadow({ mode: "open" });
+      root.innerHTML = `<style>${STYLE}${PORTAL_STYLE}</style><div class="dlg"></div>`;
+      document.body.appendChild(host);
+      this._portal = host;
+      this._dlgEl = root.querySelector(".dlg");
+    }
+    const accent = safeCssColor(this._config && this._config.accent_color);
+    if (accent) this._portal.style.setProperty("--timetree-accent", accent);
+    else this._portal.style.removeProperty("--timetree-accent");
+  }
+
+  _removePortal() {
+    if (this._escHandler) window.removeEventListener("keydown", this._escHandler);
+    this._escHandler = null;
+    if (this._portal) this._portal.remove();
+    this._portal = this._dlgEl = null;
   }
 
   _wireDialog(bd) {
