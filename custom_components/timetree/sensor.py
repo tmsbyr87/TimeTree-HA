@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.const import EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -30,7 +31,11 @@ async def async_setup_entry(
     account: TimeTreeAccount = hass.data[DOMAIN][entry.entry_id]
     entities: list[SensorEntity] = []
     for coordinator in account.coordinators.values():
-        entities += [TimeTreeTodaySensor(coordinator), TimeTreeNextEventSensor(coordinator)]
+        entities += [
+            TimeTreeTodaySensor(coordinator),
+            TimeTreeNextEventSensor(coordinator),
+            TimeTreeLastSyncSensor(coordinator),
+        ]
     async_add_entities(entities)
 
 
@@ -99,3 +104,16 @@ class TimeTreeNextEventSensor(_TimeTreeSensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         item = self._next()
         return self._describe(item) if item else {}
+
+
+class TimeTreeLastSyncSensor(_TimeTreeSensor):
+    """When TimeTree was last synced successfully."""
+
+    _key = "last_sync"
+    _attr_icon = "mdi:cloud-sync-outline"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self.coordinator.last_sync

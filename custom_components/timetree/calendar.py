@@ -89,6 +89,8 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
 
     _attr_has_entity_name = True
     _attr_name = None  # use the device/entry name
+    # changes every sync; not worth a database row each time
+    _unrecorded_attributes = frozenset({"last_sync", "labels"})
     # Served by the integration itself, see __init__._async_register_brand_assets.
     _attr_entity_picture = f"{STATIC_URL_BASE}/icon.png"
 
@@ -113,8 +115,11 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
     def extra_state_attributes(self) -> dict:
         """Expose the calendar's labels so the bundled card can offer filters."""
         labels = self.coordinator.data.labels
+        last_sync = self.coordinator.last_sync
         return {
             "calendar_id": self.coordinator.calendar_id,
+            # changes after every successful sync – lets the card reload at once
+            "last_sync": last_sync.isoformat() if last_sync else None,
             "labels": [
                 {"id": lbl.label_id, "name": lbl.name, "color": lbl.color}
                 for lbl in sorted(labels.values(), key=lambda l: l.name.lower())

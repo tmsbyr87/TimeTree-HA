@@ -45,7 +45,7 @@
         "title": "TimeTree options",
         "data": {
           "calendars": "Calendars",
-          "scan_interval": "Refresh interval"
+          "scan_interval": "Refresh interval (minutes)"
         },
         "description": "Calendars to sync and how often TimeTree is asked for changes. Deselected calendars are removed from Home Assistant together with their entities."
       }
@@ -67,6 +67,9 @@
       },
       "next_event": {
         "name": "Next event"
+      },
+      "last_sync": {
+        "name": "Last sync"
       }
     }
   },

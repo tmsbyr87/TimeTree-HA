@@ -34,6 +34,7 @@
 | 🔔 **TimeTree reminders** | The alerts you set in TimeTree fire a `timetree_reminder` event – with a ready-made blueprint for push and voice |
 | 💬 **Comments & details** | Event comments in the card's detail sheet and via the `timetree.get_event_details` action |
 | 🗓️ **Dashboard card** | Agenda, *Today & tomorrow* and month view, tabs, label chips – responsive, light & dark |
+| 🔄 **Always current** | Refresh interval of your choice (5–120 min), card updates right after each sync, refresh button, *last sync* sensor |
 | 🛟 **Built to last** | Diagnostics without personal data, a repair notice if TimeTree changes its API, request limits that protect your account |
 
 ## Why this exists
@@ -95,7 +96,9 @@ You get one entry per TimeTree account and, for every selected calendar, a devic
 Open the entry's **Configure** dialog to
 
 - **add or remove calendars** — calendars you joined later show up here; deselected calendars are removed together with their entities
-- set the **refresh interval** (5–120 minutes, default 15). Because syncing is incremental, a short interval is cheap.
+- set the **refresh interval** – how often TimeTree is asked for changes: 5–120 minutes, default 15. Choose what suits you; syncing is incremental, so a short interval is cheap.
+
+**How fast do changes from the TimeTree app arrive?** TimeTree offers no push, so the integration polls. A change you make in the app shows up with the next sync – at the latest after your refresh interval. The dashboard card reloads within seconds after every sync, shows *updated 3 min ago* in its header and has a **refresh button** to ask TimeTree right away (manual refreshes are bundled to at most one every 30 seconds to protect your account).
 
 > **Upgrading from 1.3 or older?** Your existing entry is converted to an account entry automatically. The calendar keeps its entity id, history and dashboard cards; use **Configure** to add further calendars of the same account.
 
@@ -145,6 +148,7 @@ The integration ships its own Lovelace card, **TimeTree Agenda** (`custom:timetr
 | `view` | `agenda` | `agenda`, `today` (today & tomorrow) or `month` |
 | `tabs` | `false` | Tab bar to switch views on the card |
 | `show_comments` | `true` | Load TimeTree comments in the detail sheet |
+| `show_sync` | `true` | *Updated 3 min ago* and a refresh button in the header (TimeTree calendars) |
 | `tap_action` | `dialog` | `dialog` (detail sheet), `more-info` (entity dialog), `none` |
 | `accent_color` | theme primary | Any CSS colour, e.g. `#2ecc84` |
 | `labels` | all | Only show events with these TimeTree label ids (multi-select in the editor) |
@@ -187,6 +191,7 @@ Every selected calendar becomes a device with these entities (Home Assistant der
 | `calendar.<name>` | ✅ | The whole calendar — works with every calendar card and the calendar trigger |
 | `sensor.<name>_events_today` | ✅ | Number of events today; the events (time, location, label) as `events` attribute |
 | `sensor.<name>_next_event` | ✅ | Start of the next event (timestamp) with summary, location and label as attributes |
+| `sensor.<name>_last_sync` | ✅ (diagnostic) | When TimeTree was last synced successfully – e.g. alert if nothing synced for an hour |
 | `calendar.<name>_<label>` | ➖ | One calendar per TimeTree label, e.g. only *Kids* or *Work*. Disabled by default — enable the ones you want to automate on. New labels appear automatically. |
 
 ### Reminders from TimeTree
@@ -283,7 +288,9 @@ actions:
 
 **Installation:** HACS → Integrationen → ⋮ → *Custom repositories* → `https://github.com/tmsbyr87/TimeTree-HA` (Kategorie *Integration*) → herunterladen → Home Assistant neu starten.
 
-**Einrichtung:** Einstellungen → Geräte & Dienste → Integration hinzufügen → **TimeTree** → E-Mail und Passwort eingeben → Kalender ankreuzen (mehrere möglich). Pro Kalender entsteht eine `calendar.*`-Entität, die sich wie jeder andere HA-Kalender verwenden lässt. Dazu kommen die Sensoren „Termine heute“ und „Nächster Termin“ sowie (deaktiviert) je ein Kalender pro TimeTree-Label. In TimeTree gesetzte Erinnerungen lösen das Ereignis `timetree_reminder` aus; der mitgelieferte Blueprint „TimeTree reminder“ macht daraus Push-Nachrichten oder Sprachansagen. Mit der Aktion `timetree.get_event_details` holen Automationen einen Termin samt Kommentaren. Weitere Kalender und das Aktualisierungsintervall lassen sich später über **Konfigurieren** ändern; bestehende Einträge aus Version 1.3 oder älter werden automatisch übernommen, die Entitäts-ID bleibt gleich.
+**Einrichtung:** Einstellungen → Geräte & Dienste → Integration hinzufügen → **TimeTree** → E-Mail und Passwort eingeben → Kalender ankreuzen (mehrere möglich). Pro Kalender entsteht eine `calendar.*`-Entität, die sich wie jeder andere HA-Kalender verwenden lässt. Dazu kommen die Sensoren „Termine heute“ und „Nächster Termin“ sowie (deaktiviert) je ein Kalender pro TimeTree-Label. In TimeTree gesetzte Erinnerungen lösen das Ereignis `timetree_reminder` aus; der mitgelieferte Blueprint „TimeTree reminder“ macht daraus Push-Nachrichten oder Sprachansagen. **Aktualität:** TimeTree bietet kein Push – die Integration fragt im einstellbaren Intervall ab (5–120 Minuten, Standard 15, unter **Konfigurieren**). Die Karte lädt direkt nach jedem Abgleich nach, zeigt „vor 3 Min.“ und hat einen Aktualisieren-Knopf; der Sensor „Letzte Synchronisierung“ zeigt den letzten erfolgreichen Abgleich.
+
+Mit der Aktion `timetree.get_event_details` holen Automationen einen Termin samt Kommentaren. Weitere Kalender und das Aktualisierungsintervall lassen sich später über **Konfigurieren** ändern; bestehende Einträge aus Version 1.3 oder älter werden automatisch übernommen, die Entitäts-ID bleibt gleich.
 
 **Karte:** Die mitgelieferte Karte *TimeTree Agenda* erscheint nach dem Neustart automatisch in der Kartenauswahl – mit den Ansichten Agenda, Heute & Morgen und Monat (optional per Reiter umschaltbar), Label-Filter und Detail-Dialog mit Kommentaren. Hell/dunkel, Handy, Tablet und Desktop.
 

@@ -10,7 +10,7 @@
  * editor based on <ha-form>, so the card can be configured without YAML.
  */
 
-const CARD_VERSION = "1.6.4";
+const CARD_VERSION = "1.6.5";
 const CARD_TAG = "timetree-card";
 const EDITOR_TAG = "timetree-card-editor";
 const REFRESH_MS = 15 * 60 * 1000;
@@ -30,6 +30,7 @@ const STRINGS = {
     viewAgendaShort: "Agenda", viewTodayShort: "2 Tage", viewMonthShort: "Monat",
     prev: "Vorheriger Monat", next: "Nächster Monat", goToday: "Heute",
     comments: "Kommentare", commentsLoading: "Lade Kommentare …", commentsError: "Kommentare nicht verfügbar",
+    refresh: "Jetzt bei TimeTree aktualisieren", justNow: "gerade eben", syncedTitle: (t) => `Zuletzt synchronisiert: ${t}`,
     photos: (n) => (n === 1 ? "1 Foto" : `${n} Fotos`), photosHint: "in der TimeTree-App ansehen", media: "Fotos",
   },
   en: {
@@ -44,6 +45,7 @@ const STRINGS = {
     viewAgendaShort: "Agenda", viewTodayShort: "2 days", viewMonthShort: "Month",
     prev: "Previous month", next: "Next month", goToday: "Today",
     comments: "Comments", commentsLoading: "Loading comments …", commentsError: "Comments unavailable",
+    refresh: "Refresh from TimeTree now", justNow: "just now", syncedTitle: (t) => `Last synced: ${t}`,
     photos: (n) => (n === 1 ? "1 photo" : `${n} photos`), photosHint: "view them in the TimeTree app", media: "Photos",
   },
 };
@@ -72,6 +74,7 @@ const DEFAULTS = {
   view: "agenda",        // agenda | today | month
   tabs: false,           // tab bar to switch views on the card (choice remembered per device)
   show_comments: true,   // TimeTree comments in the detail dialog
+  show_sync: true,       // "updated 3 min ago" + refresh button (TimeTree calendars)
 };
 const VIEWS = ["agenda", "today", "month"];
 
@@ -102,6 +105,15 @@ const STYLE = `
   .header .title { font-size: 1.05em; font-weight: 600; line-height: 1.2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .header .spacer { flex: 1; }
   .header .count { font-size: .8em; color: var(--tt-muted); flex: none; }
+  .header .sync { display: inline-flex; align-items: center; gap: 2px; flex: none; color: var(--tt-muted); font-size: .75em; white-space: nowrap; }
+  .header .sync button { border: none; background: transparent; color: inherit; cursor: pointer; padding: 4px; margin: 0; border-radius: 50%;
+    display: grid; place-items: center; width: 30px; height: 30px; }
+  .header .sync button:hover { background: color-mix(in srgb, var(--primary-text-color) 8%, transparent); }
+  .header .sync button:disabled { cursor: default; }
+  .header .sync ha-icon { --mdc-icon-size: 18px; }
+  .header .sync.spin ha-icon { animation: spin 900ms linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @container card (max-width: 360px) { .header .sync .ago { display: none; } }
 
   .chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px var(--tt-pad) 6px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: .8em;
@@ -365,6 +377,7 @@ class TimeTreeCard extends HTMLElement {
     const language = lang(hass);
     const langChanged = language !== this._lang;
     this._lang = language;
+    if (changed && this._refreshing) { this._refreshing = false; clearTimeout(this._refreshTimer); }
     if (first || changed) this._maybeFetch(first); else if (langChanged) this._render();
   }
 
@@ -395,7 +408,14 @@ class TimeTreeCard extends HTMLElement {
 
   async _maybeFetch(force) {
     if (!this._hass || !this._config) return;
-    if (!force && Date.now() - this._lastFetch < 5000) return;
+    const wait = 5000 - (Date.now() - this._lastFetch);
+    if (!force && wait > 0) {
+      // throttled, but never dropped: fetch once when the window is over
+      if (!this._pendingFetch) this._pendingFetch = setTimeout(() => { this._pendingFetch = null; this._maybeFetch(true); }, wait);
+      this._render();
+      return;
+    }
+    clearTimeout(this._pendingFetch); this._pendingFetch = null;
     const entities = this._config.entities || [];
     if (!entities.length) { this._status = "missing"; this._render(); return; }
     this._status = this._events.length ? "ready" : "loading";
@@ -655,7 +675,7 @@ class TimeTreeCard extends HTMLElement {
     else body = this._agendaHtml(events, now, today);
 
     const header = c.show_header
-      ? `<div class="header">${iconHtml}<div style="min-width:0"><div class="title">${esc(title)}</div></div><div class="spacer"></div>${this._count ? `<div class="count">${this._count}</div>` : ""}</div>` : "";
+      ? `<div class="header">${iconHtml}<div style="min-width:0"><div class="title">${esc(title)}</div></div><div class="spacer"></div>${this._syncHtml(now)}${this._count ? `<div class="count">${this._count}</div>` : ""}</div>` : "";
 
     // Build the skeleton once and only replace the parts whose markup changed,
     // so an open dialog is never torn down by an unrelated re-render.
@@ -676,6 +696,52 @@ class TimeTreeCard extends HTMLElement {
       this._wireMain();
     }
     this._renderDialog(now);
+  }
+
+  _ttEntities() {
+    return (this._config.entities || []).filter((e) => isTimeTree(this._hass, e));
+  }
+
+  _lastSync() {
+    // the oldest sync of all shown TimeTree calendars
+    let oldest = null;
+    for (const e of this._ttEntities()) {
+      const raw = this._hass.states[e].attributes.last_sync;
+      const d = raw ? new Date(raw) : null;
+      if (d && !isNaN(d) && (!oldest || d < oldest)) oldest = d;
+    }
+    return oldest;
+  }
+
+  _syncHtml(now) {
+    if (!this._config.show_sync || !this._hass || !this._ttEntities().length) return "";
+    const t = (k, ...a) => this._t(k, ...a);
+    const last = this._lastSync();
+    let ago = "";
+    if (last) {
+      const mins = Math.max(0, Math.round((now - last) / 60000));
+      const rtf = new Intl.RelativeTimeFormat(this._locale(), { numeric: "auto", style: "short" });
+      ago = mins < 1 ? t("justNow") : mins < 60 ? rtf.format(-mins, "minute") : rtf.format(-Math.round(mins / 60), "hour");
+    }
+    const title = last ? t("syncedTitle", `${this._fmtLong(last)}, ${this._fmtTime(last)}`) : t("refresh");
+    return `<div class="sync${this._refreshing ? " spin" : ""}" title="${esc(title)}"><span class="ago">${esc(ago)}</span>
+      <button class="refresh" aria-label="${esc(t("refresh"))}" ${this._refreshing ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon></button></div>`;
+  }
+
+  async _refresh() {
+    const entities = this._ttEntities();
+    if (!entities.length || this._refreshing) return;
+    this._refreshing = true;
+    this._render();
+    clearTimeout(this._refreshTimer);
+    // stop spinning when the calendars report a new sync (see set hass) or after 20 s
+    this._refreshTimer = setTimeout(() => { this._refreshing = false; this._render(); }, 20000);
+    try {
+      await this._hass.callService("homeassistant", "update_entity", { entity_id: entities });
+    } catch (err) {
+      console.warn("timetree-card: refresh failed", err); // eslint-disable-line no-console
+      this._refreshing = false; clearTimeout(this._refreshTimer); this._render();
+    }
   }
 
   _renderDialog(now) {
@@ -741,6 +807,8 @@ class TimeTreeCard extends HTMLElement {
       el.addEventListener("click", open);
       el.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
     });
+    const rb = this.shadowRoot.querySelector(".sync .refresh");
+    if (rb) rb.addEventListener("click", (ev) => { ev.stopPropagation(); this._refresh(); });
     this.shadowRoot.querySelectorAll(".chip").forEach((el) => el.addEventListener("click", () => this._toggleChip(el.dataset.key)));
     this.shadowRoot.querySelectorAll(".tab").forEach((el) => el.addEventListener("click", () => this._setView(el.dataset.view)));
     this.shadowRoot.querySelectorAll(".mnav button").forEach((el) => el.addEventListener("click", () => this._shiftMonth(Number(el.dataset.m))));
@@ -881,6 +949,7 @@ class TimeTreeCardEditor extends HTMLElement {
       { name: "relative_days", selector: { boolean: {} } },
       { name: "compact", selector: { boolean: {} } },
       { name: "show_comments", selector: { boolean: {} } },
+      { name: "show_sync", selector: { boolean: {} } },
     ] });
     schema.push({ name: "empty_text", selector: { text: {} } });
     return schema;
@@ -894,14 +963,14 @@ class TimeTreeCardEditor extends HTMLElement {
       label_filter: "Label-Filter auf der Karte", show_label: "Label am Termin", show_header: "Kopfzeile", show_icon: "Icon anzeigen",
       show_all_day: "Ganztägige anzeigen", show_location: "Ort anzeigen", show_description: "Beschreibung anzeigen",
       relative_days: "Heute / Morgen", compact: "Kompakt", empty_text: "Text wenn keine Termine",
-      view: "Ansicht", tabs: "Reiter zum Umschalten", show_comments: "Kommentare im Detail",
+      view: "Ansicht", tabs: "Reiter zum Umschalten", show_comments: "Kommentare im Detail", show_sync: "Aktualisiert-Anzeige & Knopf",
     } : {
       entities: "Calendars", title: "Title", icon: "Icon", days: "Range", max_events: "Max. events", layout: "Layout",
       tap_action: "On tap", accent_color: "Accent colour (e.g. #2ecc84)", labels: "Only show these labels",
       label_filter: "Label filter on the card", show_label: "Label on event", show_header: "Header", show_icon: "Show icon",
       show_all_day: "Show all-day events", show_location: "Show location", show_description: "Show description",
       relative_days: "Today / Tomorrow", compact: "Compact", empty_text: "Text when empty",
-      view: "View", tabs: "Tabs to switch views", show_comments: "Comments in details",
+      view: "View", tabs: "Tabs to switch views", show_comments: "Comments in details", show_sync: "Last update & refresh button",
     };
     return map[schema.name] || schema.name;
   }

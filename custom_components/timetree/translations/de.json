@@ -45,7 +45,7 @@
         "title": "TimeTree-Optionen",
         "data": {
           "calendars": "Kalender",
-          "scan_interval": "Aktualisierungsintervall"
+          "scan_interval": "Abfrage-Intervall (Minuten)"
         },
         "description": "Welche Kalender synchronisiert werden und wie oft TimeTree nach Änderungen gefragt wird. Abgewählte Kalender werden samt Entitäten aus Home Assistant entfernt."
       }
@@ -67,6 +67,9 @@
       },
       "next_event": {
         "name": "Nächster Termin"
+      },
+      "last_sync": {
+        "name": "Letzte Synchronisierung"
       }
     }
   },

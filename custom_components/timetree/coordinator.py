@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import async_track_time_change
 
 from .api import (
@@ -53,6 +54,7 @@ _SESSION_KEY = f"{DOMAIN}_http_session"
 # After this many consecutive "unexpected structure" answers we assume TimeTree
 # changed its web API and raise a repair issue (one blip is not enough).
 API_CHANGE_THRESHOLD = 3
+REFRESH_COOLDOWN = timedelta(seconds=30)
 COMMENT_CACHE = timedelta(minutes=1)
 COMMENT_FAILURE_CACHE = timedelta(seconds=30)
 COMMENT_CACHE_SIZE = 200
@@ -182,8 +184,14 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
             name=f"{DOMAIN}_{calendar_id}",
             update_interval=timedelta(minutes=minutes),
             config_entry=entry,
+            # Manual refreshes (card button, homeassistant.update_entity) are
+            # bundled: TimeTree is asked at most every REFRESH_COOLDOWN.
+            request_refresh_debouncer=Debouncer(
+                hass, _LOGGER, cooldown=REFRESH_COOLDOWN.total_seconds(), immediate=True
+            ),
         )
         self._account = account
+        self.last_sync: datetime | None = None
         self._client = account.client
         self._calendar_id = int(calendar_id)
         self.calendar_name = calendar_name
@@ -372,6 +380,7 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
 
             self.store.merge(result.events, result.since)
             self._record_success()
+            self.last_sync = dt_util.utcnow()
             # Labels are cheap (one small GET) and rarely change; refresh
             # them alongside the events so colours and names stay current.
             try:

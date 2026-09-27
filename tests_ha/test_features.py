@@ -244,3 +244,31 @@ async def test_unedited_old_blueprint_is_upgraded_edited_one_kept(hass: HomeAssi
         assert target.read_bytes() == edited
     finally:
         target.unlink(missing_ok=True)
+
+
+async def test_last_sync_attribute_and_sensor(hass: HomeAssistant, fake_client) -> None:
+    await _setup(hass)
+    cal = hass.states.get("calendar.family")
+    assert cal.attributes["last_sync"] is not None
+    sensor_id = _entity_id(hass, "sensor", "timetree_42_last_sync")
+    entry = er.async_get(hass).async_get(sensor_id)
+    assert entry.entity_category is er.EntityCategory.DIAGNOSTIC
+    assert hass.states.get(sensor_id).attributes["device_class"] == "timestamp"
+
+
+async def test_manual_refreshes_are_bundled(hass: HomeAssistant, fake_client, freezer) -> None:
+    from homeassistant.setup import async_setup_component as setup
+
+    await _setup(hass)
+    assert await setup(hass, "homeassistant", {})
+    before = len(fake_client.sync_calls)
+    first_sync = hass.states.get("calendar.family").attributes["last_sync"]
+
+    freezer.tick(timedelta(seconds=2))
+    for _ in range(5):  # someone hammering the refresh button
+        await hass.services.async_call(
+            "homeassistant", "update_entity", {"entity_id": "calendar.family"}, blocking=True
+        )
+    await hass.async_block_till_done()
+    assert len(fake_client.sync_calls) - before == 1  # immediate, then debounced
+    assert hass.states.get("calendar.family").attributes["last_sync"] != first_sync
