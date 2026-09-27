@@ -32,7 +32,11 @@ def _v2_entry(calendars=("42", "7"), session="good") -> MockConfigEntry:
 
 def _timetree_entities(hass: HomeAssistant) -> dict[str, str]:
     registry = er.async_get(hass)
-    return {e.unique_id: e.entity_id for e in registry.entities.values() if e.platform == DOMAIN}
+    return {
+        e.unique_id: e.entity_id
+        for e in registry.entities.values()
+        if e.platform == DOMAIN and e.domain == "calendar" and "_label_" not in e.unique_id
+    }
 
 
 async def test_v1_entry_migrates_and_keeps_entity_id(hass: HomeAssistant, fake_client) -> None:

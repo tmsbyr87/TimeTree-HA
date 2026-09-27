@@ -12,7 +12,7 @@ def _calendar():
         calendar_id=42,
         raw_events=[
             {"uuid": "u1", "title": "Dentist Anna", "note": "bring card", "location": "Main Street 12",
-             "all_day": False, "recurrences": ["RRULE:FREQ=WEEKLY"], "label_id": 3},
+             "all_day": False, "recurrences": ["RRULE:FREQ=WEEKLY"], "label_id": 3, "alerts": [15]},
             {"uuid": "u2", "title": "Holiday", "all_day": True, "recurrences": None, "label_id": None},
         ],
         label_count=5,
@@ -68,5 +68,6 @@ def test_counters_and_field_names_are_present():
     assert events["recurring"] == 1
     assert events["with_label"] == 1
     assert events["with_location"] == 1
+    assert events["with_alerts"] == 1
     assert events["window_occurrences"] == 17
     assert "title" in events["field_names"] and "label_id" in events["field_names"]

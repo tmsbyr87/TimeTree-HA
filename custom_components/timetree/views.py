@@ -40,9 +40,10 @@ def _coordinator_for(hass: HomeAssistant, entity_id: str) -> TimeTreeCoordinator
     account: TimeTreeAccount | None = hass.data.get(DOMAIN, {}).get(entry.config_entry_id)
     if account is None:
         return None
+    # "timetree_<calendar>" or "timetree_<calendar>_label_<label>"
     try:
-        calendar_id = int(str(entry.unique_id).removeprefix(f"{DOMAIN}_"))
-    except ValueError:
+        calendar_id = int(str(entry.unique_id).split("_")[1])
+    except (IndexError, ValueError):
         return None
     return account.coordinators.get(calendar_id)
 

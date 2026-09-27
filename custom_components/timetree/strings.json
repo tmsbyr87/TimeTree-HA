@@ -59,5 +59,15 @@
       "title": "TimeTree changed its web API",
       "description": "TimeTree answered several times in a row with a data format this integration does not understand. This usually means TimeTree changed its (unofficial) web API. Your calendar keeps its last known events. Please check for an update of the TimeTree integration in HACS, or report it via the link below – attach the diagnostics download, it contains no personal data."
     }
+  },
+  "entity": {
+    "sensor": {
+      "events_today": {
+        "name": "Events today"
+      },
+      "next_event": {
+        "name": "Next event"
+      }
+    }
   }
 }
