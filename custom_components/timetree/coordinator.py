@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import (
     TimeTreeAuthError,
@@ -29,6 +30,12 @@ from .const import (
 from .store import EventStore
 
 _LOGGER = logging.getLogger(__name__)
+
+# How far the pre-expanded occurrence window reaches. The entity's "next
+# event" is looked up in this window only; async_get_events still expands
+# any range on demand.
+WINDOW_PAST = timedelta(days=1)
+WINDOW_FUTURE = timedelta(days=90)
 
 
 class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
@@ -88,10 +95,17 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
                 raise UpdateFailed(f"TimeTree unreachable: {err}") from err
 
             self.store.merge(result.events, result.since)
+            # Recurrence expansion is CPU-bound and ``ical`` timelines are
+            # lazy, so materialise the window here, off the event loop.
+            now = dt_util.now()
+            await self.hass.async_add_executor_job(
+                self.store.build_window, now.tzinfo, now - WINDOW_PAST, now + WINDOW_FUTURE
+            )
             _LOGGER.debug(
-                "TimeTree sync: %d changes, %d events held, cursor %s",
+                "TimeTree sync: %d changes, %d events held, %d occurrences in window, cursor %s",
                 len(result.events),
                 self.store.count,
+                len(self.store.window),
                 result.since,
             )
             return self.store
