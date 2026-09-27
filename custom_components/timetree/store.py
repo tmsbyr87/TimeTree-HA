@@ -61,6 +61,10 @@ class EventStore:
         label_id = self.label_id_of(uid)
         return self._labels.get(label_id) if label_id is not None else None
 
+    def raw_events(self) -> list[dict[str, Any]]:
+        """Copies of the stored raw payloads (for diagnostics)."""
+        return [dict(raw) for raw in self._raw.values()]
+
     @property
     def cursor(self) -> int | None:
         """Sync cursor to pass as ``since`` on the next fetch."""

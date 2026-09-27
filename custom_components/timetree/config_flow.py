@@ -29,6 +29,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .api import (
+    TimeTreeApiChanged,
     TimeTreeCalendarInfo,
     TimeTreeClient,
     TimeTreeConnectionError,
@@ -76,6 +77,8 @@ async def _async_login_and_list(
 
 
 def _map_error(err: Exception) -> str:
+    if isinstance(err, TimeTreeApiChanged):
+        return "api_changed"
     if isinstance(err, TimeTreeInvalidCredentials):
         return "invalid_auth"
     if isinstance(err, TimeTreeRateLimited):

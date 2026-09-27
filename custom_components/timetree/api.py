@@ -52,6 +52,13 @@ class TimeTreeSessionExpired(TimeTreeError):
     """The stored session cookie is no longer accepted."""
 
 
+class TimeTreeApiChanged(TimeTreeError):
+    """TimeTree answered 200 but with a structure this client does not know.
+
+    The web API is unofficial; this is the signal that TimeTree changed it.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class TimeTreeCalendarInfo:
     """Minimal description of a calendar the account has access to."""
@@ -192,8 +199,12 @@ class TimeTreeClient:
     async def async_list_calendars(self) -> list[TimeTreeCalendarInfo]:
         """Return all calendars visible to the logged-in account."""
         data = await self._get_json("/calendars?since=0")
+        if not isinstance(data, dict) or not isinstance(data.get("calendars"), list):
+            raise TimeTreeApiChanged("calendars: expected an object with a 'calendars' list")
         result: list[TimeTreeCalendarInfo] = []
-        for cal in data.get("calendars", []):
+        for cal in data["calendars"]:
+            if not isinstance(cal, dict):
+                continue
             cal_id = cal.get("id")
             if cal_id is None:
                 continue
@@ -218,6 +229,8 @@ class TimeTreeClient:
             raise
         except TimeTreeConnectionError as err:
             _LOGGER.debug("TimeTree labels unavailable for %s: %s", calendar_id, err)
+            return {}
+        if not isinstance(data, dict):
             return {}
         result: dict[int, TimeTreeLabel] = {}
         for raw in data.get("calendar_labels") or data.get("labels") or []:
@@ -245,9 +258,15 @@ class TimeTreeClient:
         if since is not None:
             path = f"{path}?since={since}"
         data = await self._get_json(path)
+        if not isinstance(data, dict) or not isinstance(data.get("events"), list):
+            raise TimeTreeApiChanged("events/sync: expected an object with an 'events' list")
+        try:
+            cursor = int(data.get("since") or 0)
+        except (TypeError, ValueError) as err:
+            raise TimeTreeApiChanged("events/sync: 'since' is not a number") from err
         return SyncResult(
-            events=list(data.get("events") or []),
-            since=int(data.get("since") or 0),
+            events=[ev for ev in data["events"] if isinstance(ev, dict)],
+            since=cursor,
             has_more=bool(data.get("chunk")),
         )
 

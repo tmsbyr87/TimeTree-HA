@@ -29,7 +29,8 @@
       "rate_limited": "TimeTree begrenzt gerade die Anmeldeversuche. Bitte ein paar Minuten warten.",
       "cannot_connect": "TimeTree ist nicht erreichbar.",
       "no_calendars": "Dieses Konto hat keine Kalender.",
-      "unknown": "Unerwarteter Fehler."
+      "unknown": "Unerwarteter Fehler.",
+      "api_changed": "TimeTree hat in einem unbekannten Datenformat geantwortet. Bitte nach einem Update der Integration schauen."
     },
     "abort": {
       "already_configured": "Dieser Kalender ist bereits eingerichtet.",
@@ -45,6 +46,12 @@
           "scan_interval": "Aktualisierungsintervall"
         }
       }
+    }
+  },
+  "issues": {
+    "api_changed": {
+      "title": "TimeTree hat seine Web-Schnittstelle geändert",
+      "description": "TimeTree hat mehrfach hintereinander in einem Datenformat geantwortet, das diese Integration nicht versteht. Das bedeutet meist, dass TimeTree seine (inoffizielle) Web-Schnittstelle geändert hat. Der Kalender behält die zuletzt bekannten Termine. Bitte in HACS nach einem Update der TimeTree-Integration schauen oder den Fehler über den Link unten melden – die Diagnose-Datei kann bedenkenlos angehängt werden, sie enthält keine persönlichen Daten."
     }
   }
 }
