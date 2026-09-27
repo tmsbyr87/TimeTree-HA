@@ -76,7 +76,7 @@
   "services": {
     "get_event_details": {
       "name": "Get event details",
-      "description": "Returns an event of a TimeTree calendar with its comments and photo links. Without an event id, the next upcoming event is used.",
+      "description": "Returns an event of a TimeTree calendar with its comments and the number of photos. Without an event id, the next upcoming event is used.",
       "fields": {
         "entity_id": {
           "name": "Calendar",

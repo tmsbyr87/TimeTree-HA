@@ -149,7 +149,9 @@ def to_ical_event(raw: dict[str, Any]) -> Event | None:
             try:
                 rrule = _align_until(Recur.from_rrule(value), all_day, start_tz)
             except (ValueError, CalendarParseError) as err:
-                _LOGGER.warning("Ignoring invalid RRULE %r for %s: %s", value, uid, err)
+                # no event content at WARNING – logs end up in public bug reports
+                _LOGGER.warning("Ignoring invalid recurrence rule of TimeTree event %s: %s", uid, err)
+                _LOGGER.debug("Invalid RRULE of %s: %r", uid, value)
                 rrule = None
         elif name == "EXDATE":
             exdates.extend(_parse_exdates(value))
@@ -179,5 +181,6 @@ def to_ical_event(raw: dict[str, Any]) -> Event | None:
         return Event(**kwargs)
     except (ValueError, TypeError, CalendarParseError) as err:
         # One malformed event must never take the whole calendar down.
-        _LOGGER.warning("Skipping event %s (%r): %s", uid, kwargs.get("summary"), err)
+        _LOGGER.warning("Skipping TimeTree event %s: %s", uid, err)
+        _LOGGER.debug("Skipped event %s had summary %r", uid, kwargs.get("summary"))
         return None

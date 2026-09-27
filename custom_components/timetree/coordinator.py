@@ -37,7 +37,7 @@ from .const import (
     DOMAIN,
     EVENT_REMINDER,
 )
-from .comments import comments_from_activities, media_candidates, member_names
+from .comments import comments_from_activities, member_names
 from .insights import describe, due_reminders
 from .store import EventStore
 
@@ -283,10 +283,10 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
             "activity_attachment_keys",
             [a["attachment"] for a in activities if isinstance(a.get("attachment"), dict)],
         )
-        result = {
-            "comments": comments_from_activities(activities, self._members),
-            "media": media_candidates(activities),
-        }
+        # Photo URLs are deliberately not passed on: their format is not
+        # documented and they may be signed links that would end up in
+        # automation traces. Events report their photo count instead.
+        result = {"comments": comments_from_activities(activities, self._members)}
         self._cache_put(uid, now, result)
         return result
 

@@ -10,7 +10,7 @@
  * editor based on <ha-form>, so the card can be configured without YAML.
  */
 
-const CARD_VERSION = "1.6.5";
+const CARD_VERSION = "1.6.6";
 const CARD_TAG = "timetree-card";
 const EDITOR_TAG = "timetree-card-editor";
 const REFRESH_MS = 15 * 60 * 1000;
@@ -295,10 +295,25 @@ const safeCssColor = (v) => {
   try { return window.CSS && CSS.supports("color", v.trim()) ? v.trim() : ""; } catch (_) { return ""; }
 };
 
+// URLs end at whitespace, quotes and angle brackets; trailing punctuation
+// ("see https://x.y/a.") stays outside the link.
+const URL_RE = /https?:\/\/[^\s<>"'`]+/g;
+
 function linkify(text) {
-  // escape first, then turn URLs into links
-  return esc(text).replace(/(https?:\/\/[^\s<]+)/g, (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`);
+  // split the RAW text, escape every piece: a URL can never leave its attribute
+  const raw = String(text == null ? "" : text);
+  let out = ""; let last = 0;
+  for (const m of raw.matchAll(URL_RE)) {
+    let url = m[0]; const trail = (url.match(/[.,;:!?)\]]+$/) || [""])[0];
+    url = url.slice(0, url.length - trail.length);
+    out += esc(raw.slice(last, m.index));
+    out += `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>${esc(trail)}`;
+    last = m.index + m[0].length;
+  }
+  return out + esc(raw.slice(last));
 }
+
+const validDate = (d) => d instanceof Date && !isNaN(d.getTime());
 
 const labelKey = (id) => String(id);
 
@@ -393,7 +408,9 @@ class TimeTreeCard extends HTMLElement {
     this._removePortal();
     if (this._timer) clearInterval(this._timer);
     if (this._clock) clearInterval(this._clock);
-    this._timer = this._clock = null;
+    clearTimeout(this._refreshTimer); clearTimeout(this._pendingFetch);
+    this._timer = this._clock = this._refreshTimer = this._pendingFetch = null;
+    this._refreshing = false;
   }
   getCardSize() { return this._view === "month" ? 8 : this._config?.compact ? 3 : 5; }
   getGridOptions() { return { columns: 12, min_columns: 6, rows: "auto" }; }
@@ -484,7 +501,7 @@ class TimeTreeCard extends HTMLElement {
 
   _normalize(ev, entity, idx) {
     const s = parseHaDate(ev.start); const e = parseHaDate(ev.end);
-    if (!s || !e) return null;
+    if (!s || !e || !validDate(s.dt) || !validDate(e.dt)) return null; // never let one bad event break the card
     const entityColor = safeHex(this._config.colors && this._config.colors[idx], PALETTE[idx % PALETTE.length]);
     const label = ev.label && ev.label.id !== undefined ? { id: ev.label.id, name: ev.label.name, color: safeHex(ev.label.color) } : null;
     const st = this._hass.states[entity];
@@ -858,7 +875,8 @@ class TimeTreeCard extends HTMLElement {
     if (!state.items.length) return null;
     const fmt = new Intl.DateTimeFormat(this._locale(), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
     const list = state.items.map((c) => {
-      const when = c.created_at ? fmt.format(new Date(c.created_at)) : "";
+      const created = c.created_at ? new Date(c.created_at) : null;
+      const when = validDate(created) ? fmt.format(created) : "";
       const who = [c.author ? `<b>${esc(c.author)}</b>` : "", esc(when)].filter(Boolean).join(" · ");
       return `<div class="c">${who ? `<div class="who">${who}</div>` : ""}<div class="txt">${linkify(c.content)}</div></div>`;
     }).join("");

@@ -158,12 +158,9 @@ class EventStore:
                 try:
                     ev = to_ical_event(raw)
                 except Exception as err:  # noqa: BLE001 – deliberately broad
-                    _LOGGER.warning(
-                        "Skipping TimeTree event %s (%r): %s",
-                        uid,
-                        raw.get("title"),
-                        err,
-                    )
+                    # no event content at WARNING – logs end up in bug reports
+                    _LOGGER.warning("Skipping TimeTree event %s: %s", uid, err)
+                    _LOGGER.debug("Skipped event %s had title %r", uid, raw.get("title"))
                     continue
                 if ev is not None:
                     cal.events.append(ev)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from pathlib import Path
 
 from homeassistant.components.http import StaticPathConfig
@@ -47,6 +48,7 @@ BLUEPRINT_FILENAME = "timetree_reminder.yaml"
 # sha256 of every blueprint version shipped before; such unedited copies are upgraded.
 SHIPPED_BLUEPRINT_SHA256 = {
     "6109ba468c69bd8cfda76de5131393694c274a02a225662b67712fe5970f11b4",  # 1.5.0 – 1.6.1
+    "58329f7082b073b2e2cfcd82001221306e6611871fe5676be216c4319160b16e",  # 1.6.2 –
 }
 
 
@@ -121,7 +123,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         if uid is None:
             item = next_event(store.window, dt_util.now())
             if item is None:
-                return {"event": None, "comments": [], "media": []}
+                return {"event": None, "comments": []}
             uid = item.uid
         if not UID_RE.match(uid) or not store.has(uid):
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="unknown_event")
@@ -139,7 +141,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             )
             | {"media_count": store.media_count_of(uid)},
             "comments": activity["comments"],
-            "media": activity["media"],
         }
 
     hass.services.async_register(
@@ -214,18 +215,24 @@ async def _async_install_blueprint(hass: HomeAssistant) -> None:
     source = Path(__file__).parent / "blueprints" / BLUEPRINT_FILENAME
     target = Path(hass.config.path("blueprints", "automation", DOMAIN, BLUEPRINT_FILENAME))
 
+    def _write(data: bytes) -> None:
+        # write next to the target and swap atomically – never a half file
+        tmp = target.with_name(f".{target.name}.tmp")
+        tmp.write_bytes(data)
+        os.replace(tmp, target)
+
     def _sync() -> str | None:
-        if not source.exists():
-            return None
+        if not source.exists() or target.is_symlink():
+            return None  # a symlinked blueprint is the user's business
         new = source.read_bytes()
         if target.exists():
             current = target.read_bytes()
             if current == new or hashlib.sha256(current).hexdigest() not in SHIPPED_BLUEPRINT_SHA256:
                 return None  # up to date, or edited by the user
-            target.write_bytes(new)
+            _write(new)
             return "Updated"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(new)
+        _write(new)
         return "Installed"
 
     try:

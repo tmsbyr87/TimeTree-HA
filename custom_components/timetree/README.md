@@ -233,7 +233,7 @@ actions:
 
 ### Action: `timetree.get_event_details`
 
-Returns an event with its **comments** and **photo links** — handy for notifications or voice assistants. Without `uid` it uses the next upcoming event.
+Returns an event with its **comments** — handy for notifications or voice assistants. Without `uid` it uses the next upcoming event.
 
 ```yaml
 actions:
@@ -248,7 +248,7 @@ actions:
       message: "{{ details.comments | map(attribute='content') | join('\n') or 'No comments' }}"
 ```
 
-Response: `event` (summary, start, end, location, label, `media_count`), `comments` (`author`, `content`, `created_at`) and `media` (links found in the event's activity). Requests are cached and rate-limited like the card's.
+Response: `event` (summary, start, end, location, label, `media_count`) and `comments` (`author`, `content`, `created_at`). Photos are reported as a count only – their links are not passed on, so they cannot leak into automation traces. Requests are cached and rate-limited like the card's. Like any Home Assistant action, it can be used by every user who can log in.
 
 ### Automations with the calendar
 

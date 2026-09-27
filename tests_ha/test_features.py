@@ -272,3 +272,29 @@ async def test_manual_refreshes_are_bundled(hass: HomeAssistant, fake_client, fr
     await hass.async_block_till_done()
     assert len(fake_client.sync_calls) - before == 1  # immediate, then debounced
     assert hass.states.get("calendar.family").attributes["last_sync"] != first_sync
+
+
+
+def test_shipped_blueprint_hash_is_registered() -> None:
+    """Every shipped blueprint must be listed, or later releases cannot upgrade it."""
+    import hashlib
+
+    from custom_components.timetree import BLUEPRINT_FILENAME, SHIPPED_BLUEPRINT_SHA256
+
+    source = Path(__file__).parents[1] / "custom_components" / DOMAIN / "blueprints" / BLUEPRINT_FILENAME
+    assert hashlib.sha256(source.read_bytes()).hexdigest() in SHIPPED_BLUEPRINT_SHA256
+
+
+async def test_symlinked_blueprint_is_left_alone(hass: HomeAssistant, fake_client, tmp_path) -> None:
+    target = Path(hass.config.path("blueprints", "automation", DOMAIN, "timetree_reminder.yaml"))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    elsewhere = tmp_path / "mine.yaml"
+    elsewhere.write_text("# my own blueprint\n")
+    target.unlink(missing_ok=True)
+    target.symlink_to(elsewhere)
+    try:
+        await _setup(hass)
+        assert elsewhere.read_text() == "# my own blueprint\n"
+        assert target.is_symlink()
+    finally:
+        target.unlink(missing_ok=True)

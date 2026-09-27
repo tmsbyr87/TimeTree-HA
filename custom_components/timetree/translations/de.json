@@ -76,7 +76,7 @@
   "services": {
     "get_event_details": {
       "name": "Termindetails abrufen",
-      "description": "Liefert einen Termin eines TimeTree-Kalenders mit Kommentaren und Foto-Links. Ohne Termin-ID wird der nächste anstehende Termin verwendet.",
+      "description": "Liefert einen Termin eines TimeTree-Kalenders mit Kommentaren und der Anzahl der Fotos. Ohne Termin-ID wird der nächste anstehende Termin verwendet.",
       "fields": {
         "entity_id": {
           "name": "Kalender",

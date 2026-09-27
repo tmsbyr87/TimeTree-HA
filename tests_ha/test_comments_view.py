@@ -93,7 +93,7 @@ async def test_event_details_action(hass: HomeAssistant, fake_client) -> None:
     )
     assert result["event"]["uid"] == "42-1" and result["event"]["summary"] == "Event 42"
     assert result["comments"][0]["author"] == "Anna"
-    assert result["media"] == []
+    assert "media" not in result  # raw attachment URLs are never passed on
 
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(
