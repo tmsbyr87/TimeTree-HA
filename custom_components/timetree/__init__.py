@@ -7,6 +7,7 @@ cookie is reused and renewed automatically.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 
@@ -43,6 +44,10 @@ PLATFORMS: list[Platform] = [Platform.CALENDAR, Platform.SENSOR]
 _BRAND_DIR = Path(__file__).parent / "brand"
 _WWW_DIR = Path(__file__).parent / "www"
 BLUEPRINT_FILENAME = "timetree_reminder.yaml"
+# sha256 of every blueprint version shipped before; such unedited copies are upgraded.
+SHIPPED_BLUEPRINT_SHA256 = {
+    "6109ba468c69bd8cfda76de5131393694c274a02a225662b67712fe5970f11b4",  # 1.5.0 – 1.6.1
+}
 
 
 async def _async_register_static_assets(hass: HomeAssistant) -> None:
@@ -200,23 +205,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_install_blueprint(hass: HomeAssistant) -> None:
-    """Copy the reminder blueprint to /config/blueprints once (never overwrite).
+    """Install or update the reminder blueprint in /config/blueprints.
 
-    Users may edit their copy; an existing file is left alone.
+    A copy the user edited is never touched: an existing file is only
+    replaced when it is byte-identical to a blueprint shipped by an earlier
+    release (see ``SHIPPED_BLUEPRINT_SHA256``).
     """
     source = Path(__file__).parent / "blueprints" / BLUEPRINT_FILENAME
     target = Path(hass.config.path("blueprints", "automation", DOMAIN, BLUEPRINT_FILENAME))
 
-    def _copy() -> bool:
-        if target.exists() or not source.exists():
-            return False
+    def _sync() -> str | None:
+        if not source.exists():
+            return None
+        new = source.read_bytes()
+        if target.exists():
+            current = target.read_bytes()
+            if current == new or hashlib.sha256(current).hexdigest() not in SHIPPED_BLUEPRINT_SHA256:
+                return None  # up to date, or edited by the user
+            target.write_bytes(new)
+            return "Updated"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(source.read_bytes())
-        return True
+        target.write_bytes(new)
+        return "Installed"
 
     try:
-        if await hass.async_add_executor_job(_copy):
-            _LOGGER.info("Installed blueprint %s", target)
+        if action := await hass.async_add_executor_job(_sync):
+            _LOGGER.info("%s blueprint %s", action, target)
+            if action == "Updated" and hass.services.has_service("automation", "reload"):
+                # automations built on the blueprint pick up the new version
+                await hass.services.async_call("automation", "reload", blocking=False)
     except OSError as err:
         _LOGGER.warning("Could not install the TimeTree reminder blueprint: %s", err)
 

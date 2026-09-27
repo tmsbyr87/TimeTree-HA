@@ -25,26 +25,9 @@ blueprint:
               filter:
                 - integration: timetree
                   domain: calendar
-        label_calendars:
-          name: Labels (pick from list)
-          description: >-
-            Only events with one of these TimeTree labels. Every label of your
-            calendar has its own calendar entity (e.g. "Family Kids"); they are
-            disabled by default – enable the ones you want under Settings →
-            Devices & services → TimeTree, then they appear here.
-            Leave this and "Labels (by name)" empty for all events.
-          default: []
-          selector:
-            entity:
-              multiple: true
-              filter:
-                - integration: timetree
-                  domain: calendar
         labels:
-          name: Labels (by name)
-          description: >-
-            Alternative to the list above: label names exactly as in TimeTree,
-            including emoji. Works without enabling label calendars.
+          name: Labels
+          description: Only events with one of these TimeTree label names (exactly as in TimeTree). Leave empty for all.
           default: []
           selector:
             text:
@@ -110,7 +93,6 @@ triggers:
 variables:
   calendars: !input calendars
   labels: !input labels
-  label_calendars: !input label_calendars
   notify_services: !input notify_services
   speakers: !input speakers
   tts_engine: !input tts_engine
@@ -128,10 +110,8 @@ variables:
 conditions:
   - condition: template
     value_template: >-
-      {% set any_label = labels | length == 0 and label_calendars | length == 0 %}
       {{ (calendars | length == 0 or trigger.event.data.entity_id in calendars)
-         and (any_label or label in labels
-              or trigger.event.data.label_entity_id in label_calendars) }}
+         and (labels | length == 0 or label in labels) }}
 
 actions:
   - repeat:

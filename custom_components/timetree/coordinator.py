@@ -299,9 +299,20 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
         """Payload of a ``timetree_reminder`` event."""
         item = reminder.item
         data = describe(item, self._last_tick.tzinfo, self.store.label_of(item.uid))
+        registry = er.async_get(self.hass)
+        label_id = data.get("label_id")
         data.update(
-            entity_id=er.async_get(self.hass).async_get_entity_id(
+            entity_id=registry.async_get_entity_id(
                 "calendar", DOMAIN, f"{DOMAIN}_{self._calendar_id}"
+            ),
+            # the label's own calendar entity – lets automations pick labels
+            # from a list instead of typing their names
+            label_entity_id=(
+                registry.async_get_entity_id(
+                    "calendar", DOMAIN, f"{DOMAIN}_{self._calendar_id}_label_{label_id}"
+                )
+                if label_id is not None
+                else None
             ),
             calendar_id=self._calendar_id,
             calendar_name=self.calendar_name,

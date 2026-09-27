@@ -179,3 +179,68 @@ async def test_blueprint_filters_other_labels(hass: HomeAssistant, fake_client, 
         assert calls == []
     finally:
         target.unlink(missing_ok=True)
+
+
+async def test_blueprint_label_picker(hass: HomeAssistant, fake_client, freezer) -> None:
+    target = Path(hass.config.path("blueprints", "automation", DOMAIN, "timetree_reminder.yaml"))
+    try:
+        await _setup(hass)
+        label_cal = _entity_id(hass, "calendar", "timetree_42_label_3")
+        calls = async_mock_service(hass, "notify", "test_phone")
+        assert await async_setup_component(
+            hass,
+            "automation",
+            {
+                "automation": [
+                    {
+                        "id": "pick",
+                        "use_blueprint": {
+                            "path": "timetree/timetree_reminder.yaml",
+                            "input": {"label_calendars": [label_cal], "notify_services": ["notify.test_phone"]},
+                        },
+                    },
+                    {
+                        "id": "other",
+                        "use_blueprint": {
+                            "path": "timetree/timetree_reminder.yaml",
+                            "input": {"label_calendars": ["calendar.something_else"], "notify_services": ["notify.test_phone"]},
+                        },
+                    },
+                ]
+            },
+        )
+        due = event_start() - timedelta(minutes=60)
+        freezer.move_to(due)
+        async_fire_time_changed(hass, due)
+        await hass.async_block_till_done()
+        assert len(calls) == 1  # only the automation that picked the event's label
+    finally:
+        target.unlink(missing_ok=True)
+
+
+async def test_reminder_carries_label_entity_id(hass: HomeAssistant, fake_client, freezer) -> None:
+    await _setup(hass)
+    events = async_capture_events(hass, "timetree_reminder")
+    due = event_start() - timedelta(minutes=60)
+    freezer.move_to(due)
+    async_fire_time_changed(hass, due)
+    await hass.async_block_till_done()
+    assert events[0].data["label_entity_id"] == _entity_id(hass, "calendar", "timetree_42_label_3")
+
+
+async def test_unedited_old_blueprint_is_upgraded_edited_one_kept(hass: HomeAssistant, fake_client) -> None:
+    target = Path(hass.config.path("blueprints", "automation", DOMAIN, "timetree_reminder.yaml"))
+    old = (Path(__file__).parent / "fixtures" / "timetree_reminder_1.5.0.yaml").read_bytes()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.write_bytes(old)
+        entry = await _setup(hass)
+        assert b"label_calendars" in target.read_bytes()
+
+        edited = old + b"\n# my own change\n"
+        target.write_bytes(edited)
+        await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert target.read_bytes() == edited
+    finally:
+        target.unlink(missing_ok=True)

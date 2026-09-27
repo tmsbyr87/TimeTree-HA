@@ -179,6 +179,8 @@ The alerts you set on an event in TimeTree (“15 minutes before”, “1 day be
 
 The bundled **TimeTree reminder** blueprint turns that into a push notification and, optionally, a spoken announcement on your speakers. It is installed automatically to `blueprints/automation/timetree/` — find it under **Settings → Automations & Scenes → Blueprints**. Filter by calendar and by TimeTree label, enter one or more notify actions (e.g. `notify.mobile_app_pixel_9`), done.
 
+Labels are your own – whatever you named them in TimeTree. Pick them from a list (enable the matching label calendars first; each TimeTree label has one) or type their names. Leave both empty to be reminded of every event. An unedited copy of the blueprint is updated automatically with new releases; once you edit it, it is left alone.
+
 <details>
 <summary>Event data of <code>timetree_reminder</code></summary>
 
@@ -191,6 +193,7 @@ The bundled **TimeTree reminder** blueprint turns that into a push notification 
 | `start`, `end` | ISO timestamps (local time) |
 | `all_day` | `false` |
 | `label_id`, `label` | `3`, `Kids` |
+| `label_entity_id` | `calendar.family_kids` (the label's calendar) |
 | `minutes_before` | `15` |
 
 ```yaml
