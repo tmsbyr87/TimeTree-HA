@@ -7,10 +7,11 @@ calendar entity reads a fully built ``ical.Calendar`` out.
 from __future__ import annotations
 
 import logging
-from datetime import tzinfo
+from datetime import datetime, tzinfo
 from typing import Any
 
 from ical.calendar import Calendar
+from ical.event import Event
 from ical.timeline import Timeline
 
 from .event import is_deleted, to_ical_event
@@ -28,6 +29,10 @@ class EventStore:
         # Expanded timelines are expensive to build (every recurrence gets
         # unrolled); cache them per timezone until the next merge.
         self._timelines: dict[str, Timeline] = {}
+        # ``ical`` timelines are lazy: every iteration re-expands all series.
+        # The coordinator therefore materialises a bounded window once, off the
+        # event loop, and the entity's ``event`` property only reads this list.
+        self._window: list[Event] = []
 
     @property
     def cursor(self) -> int | None:
@@ -45,6 +50,7 @@ class EventStore:
         self._cursor = None
         self._calendar = None
         self._timelines.clear()
+        self._window = []
 
     def merge(self, events: list[dict[str, Any]], cursor: int) -> None:
         """Apply one sync result: upsert live events, drop deleted ones."""
@@ -66,6 +72,20 @@ class EventStore:
         if key not in self._timelines:
             self._timelines[key] = self.calendar().timeline_tz(tz)
         return self._timelines[key]
+
+    def build_window(self, tz: tzinfo, start: datetime, end: datetime) -> list[Event]:
+        """Materialise all occurrences between ``start`` and ``end`` (CPU-bound).
+
+        Call this from an executor thread. The result is kept until the next
+        merge/reset and served by :pyattr:`window`.
+        """
+        self._window = list(self.timeline(tz).overlapping(start, end))
+        return self._window
+
+    @property
+    def window(self) -> list[Event]:
+        """Occurrences from the last :meth:`build_window`, sorted by start."""
+        return self._window
 
     def calendar(self) -> Calendar:
         """Return (and cache) an ical Calendar built from the stored events."""

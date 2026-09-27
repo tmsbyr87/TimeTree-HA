@@ -26,6 +26,14 @@ async def async_setup_entry(
     async_add_entities([TimeTreeCalendarEntity(coordinator, entry)])
 
 
+def _end_as_datetime(item, tz) -> datetime:
+    """Exclusive end of an occurrence as an aware datetime (dates → local midnight)."""
+    end = item.dtend
+    if isinstance(end, datetime):
+        return end if end.tzinfo else end.replace(tzinfo=tz)
+    return datetime.combine(end, datetime.min.time(), tzinfo=tz)
+
+
 def _to_calendar_event(item) -> CalendarEvent:
     """Map an expanded ``ical`` timeline item to a HA CalendarEvent."""
     start: date | datetime = item.dtstart
@@ -70,9 +78,11 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
     def event(self) -> CalendarEvent | None:
         """Return the currently running or next upcoming event."""
         now = dt_util.now()
-        timeline = self.coordinator.data.timeline(now.tzinfo)
-        for item in timeline.active_after(now):
-            return _to_calendar_event(item)
+        # The window is pre-expanded by the coordinator (executor thread) and
+        # sorted by start, so this is a cheap scan on the event loop.
+        for item in self.coordinator.data.window:
+            if _end_as_datetime(item, now.tzinfo) > now:
+                return _to_calendar_event(item)
         return None
 
     async def async_get_events(
@@ -80,7 +90,8 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
     ) -> list[CalendarEvent]:
         """Return all (expanded) events overlapping the requested window."""
         timeline = self.coordinator.data.timeline(start_date.tzinfo)
-        return [
-            _to_calendar_event(item)
-            for item in timeline.overlapping(start_date, end_date)
-        ]
+        # Expansion is CPU-bound – keep it off the event loop.
+        items = await hass.async_add_executor_job(
+            lambda: list(timeline.overlapping(start_date, end_date))
+        )
+        return [_to_calendar_event(item) for item in items]
