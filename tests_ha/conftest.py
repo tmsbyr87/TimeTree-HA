@@ -16,6 +16,7 @@ from homeassistant.util import dt as dt_util
 from custom_components.timetree.api import (
     SyncResult,
     TimeTreeCalendarInfo,
+    TimeTreeLabel,
     TimeTreeSessionExpired,
 )
 
@@ -26,8 +27,20 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
+_START: list[datetime] = []
+
+
+def event_start() -> datetime:
+    """Start of the fake events: two hours after the test began, on a full minute.
+
+    Fixed per test so that syncs triggered while the clock is moved forward
+    do not shift the event along with it.
+    """
+    return _START[0]
+
+
 def _event(uid: str, title: str) -> dict:
-    start = dt_util.now().replace(microsecond=0) + timedelta(hours=2)
+    start = event_start()
     ms = int(start.timestamp() * 1000)
     return {
         "uuid": uid,
@@ -41,7 +54,9 @@ def _event(uid: str, title: str) -> dict:
         "category": 1,
         "recurrences": None,
         "deactivated_at": None,
-        "label_id": None,
+        "label_id": 3,
+        "alerts": [60],
+        "location": "Main Street 1",
     }
 
 
@@ -50,6 +65,7 @@ class FakeClient:
 
     calendars = [TimeTreeCalendarInfo(42, "Family"), TimeTreeCalendarInfo(7, "Work")]
     valid_session = "good"
+    labels = {3: TimeTreeLabel(3, "Kids", "#3b9aa5")}
     login_calls = 0
     sync_calls: list[tuple[int, str | None]] = []
 
@@ -75,14 +91,16 @@ class FakeClient:
         return SyncResult(events=[_event(f"{calendar_id}-1", f"Event {calendar_id}")], since=1, has_more=False)
 
     async def async_get_labels(self, calendar_id: int) -> dict:
-        return {}
+        return dict(FakeClient.labels)
 
 
 @pytest.fixture
 def fake_client():
     """Patch the TimeTree client everywhere it is constructed."""
     FakeClient.calendars = [TimeTreeCalendarInfo(42, "Family"), TimeTreeCalendarInfo(7, "Work")]
+    _START[:] = [dt_util.now().replace(second=0, microsecond=0) + timedelta(hours=2)]
     FakeClient.valid_session = "good"
+    FakeClient.labels = {3: TimeTreeLabel(3, "Kids", "#3b9aa5")}
     FakeClient.login_calls = 0
     FakeClient.sync_calls = []
     with (

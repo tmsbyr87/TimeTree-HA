@@ -1,0 +1,135 @@
+blueprint:
+  name: TimeTree reminder
+  author: Thomas Beyer
+  description: >-
+    Sends a push notification – and optionally a spoken announcement – when a
+    reminder you set on a TimeTree event becomes due (e.g. "15 minutes before").
+    Filter by calendar and TimeTree label. Uses the `timetree_reminder` event of
+    the TimeTree integration.
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  source_url: https://github.com/tmsbyr87/TimeTree-HA/blob/main/custom_components/timetree/blueprints/timetree_reminder.yaml
+  input:
+    filter:
+      name: Which events
+      icon: mdi:filter
+      input:
+        calendars:
+          name: Calendars
+          description: Only reminders from these calendars. Leave empty for all TimeTree calendars.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - integration: timetree
+                  domain: calendar
+        labels:
+          name: Labels
+          description: Only events with one of these TimeTree label names (exactly as in TimeTree). Leave empty for all.
+          default: []
+          selector:
+            text:
+              multiple: true
+    notify:
+      name: Push notification
+      icon: mdi:cellphone-message
+      input:
+        notify_services:
+          name: Notify actions
+          description: >-
+            One or more notify actions, e.g. `notify.mobile_app_pixel_9` or a
+            notify group. Leave empty to skip push notifications.
+          default: []
+          selector:
+            text:
+              multiple: true
+        title:
+          name: Title
+          default: "📅 {{ summary }}"
+          selector:
+            text:
+        message:
+          name: Message
+          description: "Available: summary, when, location, calendar_name, label, minutes_before."
+          default: "{{ when }}{{ ' · ' ~ location if location }}"
+          selector:
+            text:
+              multiline: true
+    announce:
+      name: Spoken announcement
+      icon: mdi:speaker-message
+      collapsed: true
+      input:
+        speakers:
+          name: Speakers
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: media_player
+        tts_engine:
+          name: Text-to-speech engine
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: tts
+        announcement:
+          name: Announcement
+          default: "Reminder: {{ summary }} {{ when }}."
+          selector:
+            text:
+
+mode: queued
+max: 20
+
+triggers:
+  - trigger: event
+    event_type: timetree_reminder
+
+variables:
+  calendars: !input calendars
+  labels: !input labels
+  notify_services: !input notify_services
+  speakers: !input speakers
+  tts_engine: !input tts_engine
+  summary: "{{ trigger.event.data.summary }}"
+  location: "{{ trigger.event.data.location or '' }}"
+  calendar_name: "{{ trigger.event.data.calendar_name }}"
+  label: "{{ trigger.event.data.label or '' }}"
+  minutes_before: "{{ trigger.event.data.minutes_before }}"
+  when: >-
+    {%- set start = as_datetime(trigger.event.data.start) -%}
+    {%- if trigger.event.data.all_day -%}{{ start.strftime('%d.%m.') }}
+    {%- elif start.date() == now().date() -%}{{ start.strftime('%H:%M') }}
+    {%- else -%}{{ start.strftime('%d.%m. %H:%M') }}{%- endif -%}
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (calendars | length == 0 or trigger.event.data.entity_id in calendars)
+         and (labels | length == 0 or label in labels) }}
+
+actions:
+  - repeat:
+      for_each: "{{ notify_services }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          continue_on_error: true
+          data:
+            title: !input title
+            message: !input message
+  - if:
+      - condition: template
+        value_template: "{{ speakers | length > 0 and tts_engine != '' }}"
+    then:
+      - action: tts.speak
+        continue_on_error: true
+        target:
+          entity_id: "{{ tts_engine }}"
+        data:
+          media_player_entity_id: "{{ speakers }}"
+          message: !input announcement

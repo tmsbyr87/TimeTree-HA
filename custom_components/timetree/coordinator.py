@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -15,7 +15,8 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers.event import async_track_time_change
 
 from .api import (
     TimeTreeApiChanged,
@@ -31,7 +32,9 @@ from .const import (
     CONF_SESSION_ID,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
+    EVENT_REMINDER,
 )
+from .insights import describe, due_reminders
 from .store import EventStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,6 +90,16 @@ class TimeTreeAccount:
         self.options_snapshot = dict(entry.options)
         self._login_lock = asyncio.Lock()
 
+    def async_start_clock(self) -> None:
+        """Tick every minute: fire due reminders and refresh time-based sensors."""
+        self.entry.async_on_unload(
+            async_track_time_change(self.hass, self._async_tick, second=0)
+        )
+
+    async def _async_tick(self, now: datetime) -> None:
+        for coordinator in self.coordinators.values():
+            coordinator.async_tick(dt_util.as_local(now))
+
     async def async_relogin(self, failed_session_id: str | None) -> None:
         """Log in again unless another calendar already renewed the session."""
         async with self._login_lock:
@@ -135,6 +148,36 @@ class TimeTreeCoordinator(DataUpdateCoordinator[EventStore]):
         self.store = EventStore()
         self.api_change_streak = 0
         self.last_error_kind: str | None = None
+        # Reminders due before setup are not replayed after a restart.
+        self._last_tick = dt_util.now()
+        self._fired: dict[tuple[str, str, int], datetime] = {}
+
+    def async_tick(self, now: datetime) -> None:
+        """Fire reminders that became due since the last tick, then refresh listeners."""
+        previous, self._last_tick = self._last_tick, now
+        for reminder in due_reminders(self.store.window, self.store.alerts_of, previous, now):
+            if reminder.key in self._fired:
+                continue
+            self._fired[reminder.key] = reminder.fire_at
+            self.hass.bus.async_fire(EVENT_REMINDER, self.reminder_data(reminder))
+        cutoff = now - timedelta(days=1)
+        self._fired = {k: v for k, v in self._fired.items() if v > cutoff}
+        # "today" and "next event" move with the clock, not only with syncs.
+        self.async_update_listeners()
+
+    def reminder_data(self, reminder) -> dict:
+        """Payload of a ``timetree_reminder`` event."""
+        item = reminder.item
+        data = describe(item, self._last_tick.tzinfo, self.store.label_of(item.uid))
+        data.update(
+            entity_id=er.async_get(self.hass).async_get_entity_id(
+                "calendar", DOMAIN, f"{DOMAIN}_{self._calendar_id}"
+            ),
+            calendar_id=self._calendar_id,
+            calendar_name=self.calendar_name,
+            minutes_before=reminder.minutes_before,
+        )
+        return data
 
     def _record_api_change(self, err: TimeTreeApiChanged) -> None:
         self.api_change_streak += 1

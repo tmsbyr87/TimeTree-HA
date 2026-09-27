@@ -27,6 +27,10 @@ CONF_CALENDAR_NAMES = "calendar_names"
 CONF_CALENDARS = "calendars"
 CONF_SCAN_INTERVAL = "scan_interval"
 
+# Fired on the event bus when a TimeTree alert ("remind me 15 min before")
+# becomes due. See blueprints/timetree_reminder.yaml.
+EVENT_REMINDER = "timetree_reminder"
+
 DEFAULT_SCAN_INTERVAL_MINUTES = 15
 MIN_SCAN_INTERVAL_MINUTES = 5
 MAX_SCAN_INTERVAL_MINUTES = 120

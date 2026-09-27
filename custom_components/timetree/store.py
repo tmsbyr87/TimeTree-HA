@@ -61,6 +61,22 @@ class EventStore:
         label_id = self.label_id_of(uid)
         return self._labels.get(label_id) if label_id is not None else None
 
+    def alerts_of(self, uid: str) -> list[int]:
+        """TimeTree reminders of an event as minutes before its start."""
+        raw = self._raw.get(uid)
+        alerts = raw.get("alerts") if raw else None
+        if not isinstance(alerts, list):
+            return []
+        result: list[int] = []
+        for value in alerts:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            minutes = int(value)
+            # sanity bound: one year either way
+            if -525_600 <= minutes <= 525_600 and minutes not in result:
+                result.append(minutes)
+        return result
+
     def raw_events(self) -> list[dict[str, Any]]:
         """Copies of the stored raw payloads (for diagnostics)."""
         return [dict(raw) for raw in self._raw.values()]

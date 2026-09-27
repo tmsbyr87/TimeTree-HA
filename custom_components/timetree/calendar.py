@@ -8,6 +8,7 @@ from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.core import callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -25,6 +26,32 @@ async def async_setup_entry(
     account: TimeTreeAccount = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
         TimeTreeCalendarEntity(coordinator) for coordinator in account.coordinators.values()
+    )
+
+    # One (disabled by default) calendar per TimeTree label; labels created
+    # later in TimeTree show up after the next sync.
+    for coordinator in account.coordinators.values():
+        known: set[int] = set()
+
+        @callback
+        def _add_new_labels(coordinator: TimeTreeCoordinator = coordinator, known: set[int] = known) -> None:
+            new = [lid for lid in coordinator.data.labels if lid not in known]
+            if new:
+                known.update(new)
+                async_add_entities(TimeTreeLabelCalendarEntity(coordinator, lid) for lid in new)
+
+        _add_new_labels()
+        entry.async_on_unload(coordinator.async_add_listener(_add_new_labels))
+
+
+def calendar_device_info(coordinator: TimeTreeCoordinator) -> DeviceInfo:
+    """Device shared by all entities of one TimeTree calendar."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, str(coordinator.calendar_id))},
+        name=coordinator.calendar_name,
+        manufacturer="TimeTree",
+        model="Shared calendar",
+        entry_type=DeviceEntryType.SERVICE,
     )
 
 
@@ -70,13 +97,7 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
         # Same ids as in 1.0–1.3 (one entry per calendar), so migrated
         # entities keep their entity_id, history and dashboard references.
         self._attr_unique_id = f"{DOMAIN}_{coordinator.calendar_id}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, str(coordinator.calendar_id))},
-            name=coordinator.calendar_name,
-            manufacturer="TimeTree",
-            model="Shared calendar",
-            entry_type=DeviceEntryType.SERVICE,
-        )
+        self._attr_device_info = calendar_device_info(coordinator)
 
     @property
     def available(self) -> bool:
@@ -100,6 +121,10 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
             ],
         }
 
+    def _includes(self, item) -> bool:
+        """Whether an occurrence belongs to this entity (all of them here)."""
+        return True
+
     @property
     def event(self) -> CalendarEvent | None:
         """Return the currently running or next upcoming event."""
@@ -107,7 +132,7 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
         # The window is pre-expanded by the coordinator (executor thread) and
         # sorted by start, so this is a cheap scan on the event loop.
         for item in self.coordinator.data.window:
-            if _end_as_datetime(item, now.tzinfo) > now:
+            if _end_as_datetime(item, now.tzinfo) > now and self._includes(item):
                 return _to_calendar_event(item)
         return None
 
@@ -120,4 +145,44 @@ class TimeTreeCalendarEntity(CoordinatorEntity[TimeTreeCoordinator], CalendarEnt
         items = await hass.async_add_executor_job(
             lambda: list(timeline.overlapping(start_date, end_date))
         )
-        return [_to_calendar_event(item) for item in items]
+        return [_to_calendar_event(item) for item in items if self._includes(item)]
+
+
+class TimeTreeLabelCalendarEntity(TimeTreeCalendarEntity):
+    """Only the events carrying one TimeTree label (e.g. "Kids", "Work").
+
+    Disabled by default – enable the labels you want to automate on.
+    """
+
+    _attr_entity_registry_enabled_default = False
+    _attr_entity_picture = None
+
+    def __init__(self, coordinator: TimeTreeCoordinator, label_id: int) -> None:
+        super().__init__(coordinator)
+        self._label_id = label_id
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.calendar_id}_label_{label_id}"
+
+    @property
+    def name(self) -> str:
+        label = self.coordinator.data.labels.get(self._label_id)
+        return label.name if label else f"Label {self._label_id}"
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._label_id in self.coordinator.data.labels
+
+    @property
+    def icon(self) -> str:
+        return "mdi:label"
+
+    def _includes(self, item) -> bool:
+        return bool(item.uid) and self.coordinator.data.label_id_of(item.uid) == self._label_id
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        label = self.coordinator.data.labels.get(self._label_id)
+        return {
+            "calendar_id": self.coordinator.calendar_id,
+            "label_id": self._label_id,
+            "label_color": label.color if label else None,
+        }

@@ -158,14 +158,56 @@ Labels are read from the calendar entity's `labels` attribute (TimeTree calendar
 
 ## Using it
 
-The entity behaves like every other Home Assistant calendar:
+Every selected calendar becomes a device with these entities:
 
-- Drop it on a **Calendar card** or use it with community cards such as `atomic-calendar-revive`
-- Trigger automations with the **calendar event trigger** (“5 minutes before an event starts”)
+| Entity | Enabled | What it is |
+| --- | --- | --- |
+| `calendar.<name>` | ✅ | The whole calendar — works with every calendar card and the calendar trigger |
+| `sensor.<name>_events_today` | ✅ | Number of events today; the events (time, location, label) as `events` attribute |
+| `sensor.<name>_next_event` | ✅ | Start of the next event (timestamp) with summary, location and label as attributes |
+| `calendar.<name>_<label>` | ➖ | One calendar per TimeTree label, e.g. only *Kids* or *Work*. Disabled by default — enable the ones you want to automate on. New labels appear automatically. |
+
+### Reminders from TimeTree
+
+The alerts you set on an event in TimeTree (“15 minutes before”, “1 day before”) fire a `timetree_reminder` event in Home Assistant at exactly that moment — for every occurrence of a series, too.
+
+The bundled **TimeTree reminder** blueprint turns that into a push notification and, optionally, a spoken announcement on your speakers. It is installed automatically to `blueprints/automation/timetree/` — find it under **Settings → Automations & Scenes → Blueprints**. Filter by calendar and by TimeTree label, enter one or more notify actions (e.g. `notify.mobile_app_pixel_9`), done.
+
+<details>
+<summary>Event data of <code>timetree_reminder</code></summary>
+
+| Key | Example |
+| --- | --- |
+| `entity_id` | `calendar.family` |
+| `calendar_id`, `calendar_name` | `42`, `Family` |
+| `uid` | TimeTree event id |
+| `summary`, `description`, `location` | event text |
+| `start`, `end` | ISO timestamps (local time) |
+| `all_day` | `false` |
+| `label_id`, `label` | `3`, `Kids` |
+| `minutes_before` | `15` |
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: timetree_reminder
+    event_data:
+      label: Kids
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      title: "{{ trigger.event.data.summary }}"
+      message: "in {{ trigger.event.data.minutes_before }} min"
+```
+</details>
+
+### Automations with the calendar
+
+- Trigger automations with the **calendar event trigger** (“5 minutes before an event starts”) — on the whole calendar or on a label calendar
 - Read the next event from the entity's `message`, `start_time`, `end_time`, `description` and `location` attributes in templates
 
 ```yaml
-# Example: announce the first event of the day at 07:00
+# Example: announce the number of today's events at 07:00
 triggers:
   - trigger: time
     at: "07:00:00"
@@ -173,8 +215,8 @@ actions:
   - action: notify.mobile_app_phone
     data:
       message: >
-        Today: {{ state_attr('calendar.family', 'message') }}
-        ({{ state_attr('calendar.family', 'start_time') }})
+        Today: {{ states('sensor.family_events_today') }} events,
+        next: {{ state_attr('sensor.family_next_event', 'summary') }}
 ```
 
 ## Troubleshooting
@@ -192,7 +234,7 @@ actions:
 
 **Installation:** HACS → Integrationen → ⋮ → *Custom repositories* → `https://github.com/tmsbyr87/TimeTree-HA` (Kategorie *Integration*) → herunterladen → Home Assistant neu starten.
 
-**Einrichtung:** Einstellungen → Geräte & Dienste → Integration hinzufügen → **TimeTree** → E-Mail und Passwort eingeben → Kalender ankreuzen (mehrere möglich). Pro Kalender entsteht eine `calendar.*`-Entität, die sich wie jeder andere HA-Kalender verwenden lässt. Weitere Kalender und das Aktualisierungsintervall lassen sich später über **Konfigurieren** ändern; bestehende Einträge aus Version 1.3 oder älter werden automatisch übernommen, die Entitäts-ID bleibt gleich.
+**Einrichtung:** Einstellungen → Geräte & Dienste → Integration hinzufügen → **TimeTree** → E-Mail und Passwort eingeben → Kalender ankreuzen (mehrere möglich). Pro Kalender entsteht eine `calendar.*`-Entität, die sich wie jeder andere HA-Kalender verwenden lässt. Dazu kommen die Sensoren „Termine heute“ und „Nächster Termin“ sowie (deaktiviert) je ein Kalender pro TimeTree-Label. In TimeTree gesetzte Erinnerungen lösen das Ereignis `timetree_reminder` aus; der mitgelieferte Blueprint „TimeTree reminder“ macht daraus Push-Nachrichten oder Sprachansagen. Weitere Kalender und das Aktualisierungsintervall lassen sich später über **Konfigurieren** ändern; bestehende Einträge aus Version 1.3 oder älter werden automatisch übernommen, die Entitäts-ID bleibt gleich.
 
 **Wichtig:** Die Integration nutzt die interne Web-Schnittstelle von TimeTree, weil die offizielle API 2023 abgeschaltet wurde. Ändert TimeTree diese Schnittstelle, kann die Integration bis zu einem Update ausfallen. Memos und Geburtstage werden nicht übernommen.
 

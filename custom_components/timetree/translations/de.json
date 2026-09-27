@@ -59,5 +59,15 @@
       "title": "TimeTree hat seine Web-Schnittstelle geändert",
       "description": "TimeTree hat mehrfach hintereinander in einem Datenformat geantwortet, das diese Integration nicht versteht. Das bedeutet meist, dass TimeTree seine (inoffizielle) Web-Schnittstelle geändert hat. Der Kalender behält die zuletzt bekannten Termine. Bitte in HACS nach einem Update der TimeTree-Integration schauen oder den Fehler über den Link unten melden – die Diagnose-Datei kann bedenkenlos angehängt werden, sie enthält keine persönlichen Daten."
     }
+  },
+  "entity": {
+    "sensor": {
+      "events_today": {
+        "name": "Termine heute"
+      },
+      "next_event": {
+        "name": "Nächster Termin"
+      }
+    }
   }
 }

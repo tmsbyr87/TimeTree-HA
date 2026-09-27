@@ -49,13 +49,14 @@ def calendar_diagnostics(
 ) -> dict[str, Any]:
     """Counters for one synced calendar."""
     keys: Counter[str] = Counter()
-    all_day = recurring = with_label = with_location = 0
+    all_day = recurring = with_label = with_location = with_alerts = 0
     for raw in raw_events:
         keys.update(raw.keys())
         all_day += bool(raw.get("all_day"))
         recurring += bool(raw.get("recurrences"))
         with_label += raw.get("label_id") is not None
         with_location += bool(raw.get("location"))
+        with_alerts += bool(raw.get("alerts"))
 
     return {
         "calendar_id": calendar_id,
@@ -71,6 +72,7 @@ def calendar_diagnostics(
             "recurring": recurring,
             "with_label": with_label,
             "with_location": with_location,
+            "with_alerts": with_alerts,
             "window_occurrences": window_size,
             # field names only – tells us when TimeTree adds/removes fields
             "field_names": sorted(keys),
