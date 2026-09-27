@@ -6,11 +6,14 @@ calendar entity reads a fully built ``ical.Calendar`` out.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ical.calendar import Calendar
 
 from .event import is_deleted, to_ical_event
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class EventStore:
@@ -54,8 +57,19 @@ class EventStore:
         """Return (and cache) an ical Calendar built from the stored events."""
         if self._calendar is None:
             cal = Calendar()
-            for raw in self._raw.values():
-                ev = to_ical_event(raw)
+            for uid, raw in self._raw.items():
+                # Hard boundary: one malformed payload must never take the
+                # whole calendar (and with it the HA entity) down.
+                try:
+                    ev = to_ical_event(raw)
+                except Exception as err:  # noqa: BLE001 – deliberately broad
+                    _LOGGER.warning(
+                        "Skipping TimeTree event %s (%r): %s",
+                        uid,
+                        raw.get("title"),
+                        err,
+                    )
+                    continue
                 if ev is not None:
                     cal.events.append(ev)
             self._calendar = cal
