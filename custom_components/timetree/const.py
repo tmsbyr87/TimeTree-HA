@@ -11,6 +11,7 @@ CARD_URL_BASE = "/timetree_card"
 CARD_FILENAME = "timetree-card.js"
 
 API_BASE_URL = "https://timetreeapp.com/api/v1"
+API_V2_BASE_URL = "https://timetreeapp.com/api/v2"
 API_USER_AGENT = "web/2.1.0/en"
 SESSION_COOKIE = "_session_id"
 

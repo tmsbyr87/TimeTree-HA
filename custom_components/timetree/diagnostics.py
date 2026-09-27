@@ -30,6 +30,7 @@ async def async_get_config_entry_diagnostics(
                 last_update_success=coordinator.last_update_success,
                 last_error=coordinator.last_error_kind,
                 api_change_streak=coordinator.api_change_streak,
+                shape_hints=coordinator.shape_hints,
             )
         )
     return build_diagnostics(

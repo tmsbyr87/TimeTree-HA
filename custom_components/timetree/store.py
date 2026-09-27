@@ -61,6 +61,10 @@ class EventStore:
         label_id = self.label_id_of(uid)
         return self._labels.get(label_id) if label_id is not None else None
 
+    def has(self, uid: str) -> bool:
+        """Whether an event with this uid is part of the calendar."""
+        return uid in self._raw
+
     def alerts_of(self, uid: str) -> list[int]:
         """TimeTree reminders of an event as minutes before its start."""
         raw = self._raw.get(uid)
