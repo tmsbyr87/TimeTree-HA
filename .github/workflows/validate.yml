@@ -57,6 +57,3 @@ jobs:
       - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
         with:
           category: integration
-          # Since HA 2026.3 brand images ship inside the integration (brand/);
-          # the brands repository no longer accepts custom integrations.
-          ignore: brands
