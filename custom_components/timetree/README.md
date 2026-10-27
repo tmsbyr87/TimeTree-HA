@@ -3,7 +3,7 @@
 </h1>
 
 <p align="center">
-  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=tmsbyr87&repository=TimeTree-HA&category=integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge" alt="HACS Custom"></a>
+  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=tmsbyr87&repository=TimeTree-HA&category=integration"><img src="https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge" alt="HACS Default"></a>
   <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftmsbyr87%2FTimeTree-HA%2Fmain%2Fcustom_components%2Ftimetree%2Fmanifest.json&query=%24.version&label=Version&style=for-the-badge&color=purple" alt="Version">
   <img src="https://img.shields.io/badge/Home%20Assistant-min.%202024.12-41BDF5?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Minimum Home Assistant 2024.12">
   <img src="https://img.shields.io/badge/Tested%20with-HA%202026.9-2ECC84?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Tested with Home Assistant 2026.9">
@@ -67,15 +67,21 @@ TimeTree retired its public API on 22 December 2023, and there is no official Ho
 
 - **Home Assistant 2024.12** or later. Every release is tested against **2026.9**; older versions should work but are not tested.
 - A TimeTree account with **e-mail/password login** (social logins are not supported by the web endpoints this integration uses)
-- [HACS](https://hacs.xyz) for one-click installation *(optional — manual install works too)*
+- [HACS](https://hacs.xyz) for one-click installation and updates *(optional — manual install works too)*
 
 ## Installation
 
 ### HACS (recommended)
 
-[![Open your Home Assistant instance and add this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=tmsbyr87&repository=TimeTree-HA&category=integration)
+TimeTree is part of the HACS default store — no custom repository needed:
 
-Or manually: **HACS → Integrations → ⋮ → Custom repositories** → add `https://github.com/tmsbyr87/TimeTree-HA` with category **Integration**, then download **TimeTree** and restart Home Assistant.
+1. Open **HACS** and search for **TimeTree**
+2. Click **Download**
+3. Restart Home Assistant
+
+Or jump straight there:
+
+[![Open your Home Assistant instance and open this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=tmsbyr87&repository=TimeTree-HA&category=integration)
 
 ### Manual
 
@@ -287,7 +293,7 @@ actions:
 <details>
 <summary><strong>🇩🇪 Kurzanleitung auf Deutsch</strong></summary>
 
-**Installation:** HACS → Integrationen → ⋮ → *Custom repositories* → `https://github.com/tmsbyr87/TimeTree-HA` (Kategorie *Integration*) → herunterladen → Home Assistant neu starten.
+**Installation:** HACS öffnen → nach **TimeTree** suchen → herunterladen → Home Assistant neu starten. Ein benutzerdefiniertes Repository ist nicht mehr nötig.
 
 **Einrichtung:** Einstellungen → Geräte & Dienste → Integration hinzufügen → **TimeTree** → E-Mail und Passwort eingeben → Kalender ankreuzen (mehrere möglich). Pro Kalender entsteht eine `calendar.*`-Entität, die sich wie jeder andere HA-Kalender verwenden lässt. Dazu kommen die Sensoren „Termine heute“ und „Nächster Termin“ sowie (deaktiviert) je ein Kalender pro TimeTree-Label. In TimeTree gesetzte Erinnerungen lösen das Ereignis `timetree_reminder` aus; der mitgelieferte Blueprint „TimeTree reminder“ macht daraus Push-Nachrichten oder Sprachansagen. **Aktualität:** TimeTree bietet kein Push – die Integration fragt im einstellbaren Intervall ab (5–120 Minuten, Standard 15, unter **Konfigurieren**). Die Karte lädt direkt nach jedem Abgleich nach, zeigt „vor 3 Min.“ und hat einen Aktualisieren-Knopf; der Sensor „Letzte Synchronisierung“ zeigt den letzten erfolgreichen Abgleich.
 
